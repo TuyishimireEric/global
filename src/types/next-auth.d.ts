@@ -1,68 +1,60 @@
 // types/next-auth.d.ts
-import "next-auth";
-
-interface AuthUserI {
-  id: string;
-  sessionToken?: string;
-  email: string;
-  name?: string;
-  image?: string;
-  firstName: string;
-  lastName: string;
-  phoneNumber?: string;
-  isActive: boolean;
-  isEmailVerified: boolean;
-  roleId: string;
-  role?: {
-    id: string;
-    name: string;
-    description?: string | null;
-    access?: unknown;
-  } | null;
-  lastLoginAt?: Date;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
+import NextAuth, { DefaultSession, DefaultUser } from "next-auth";
+import { JWT } from "next-auth/jwt";
 
 declare module "next-auth" {
   interface Session {
-    user: AuthUserI;
+    user: {
+      id: string;
+      sessionToken: string;
+      firstName: string;
+      lastName: string;
+      phoneNumber?: string;
+      isActive: boolean;
+      isEmailVerified: boolean;
+      roleId: string;
+      role?: {
+        id: string;
+        name: string;
+        description?: string;
+        access: any;
+      };
+    } & DefaultSession["user"];
   }
 
   interface User {
     id: string;
     sessionToken?: string;
-    email: string;
-    name?: string;
-    image?: string;
-    firstName?: string;
-    lastName?: string;
+    firstName: string;
+    lastName: string;
     phoneNumber?: string;
-    isActive?: boolean;
-    isEmailVerified?: boolean;
-    roleId?: string;
+    isActive: boolean;
+    isEmailVerified: boolean;
+    roleId: string;
     role?: {
       id: string;
       name: string;
-      description?: string | null;
-      access?: unknown;
-    } | null;
-    lastLoginAt?: Date;
-    createdAt?: Date;
-    updatedAt?: Date;
+      description?: string;
+      access: any;
+    };
   }
+}
 
+declare module "next-auth/jwt" {
   interface JWT {
     id: string;
-    sessionToken?: string;
-    email?: string;
-    name?: string;
-    image?: string;
-    firstName?: string;
-    lastName?: string;
+    sessionToken: string;
+    firstName: string;
+    lastName: string;
     phoneNumber?: string;
-    isActive?: boolean;
-    isEmailVerified?: boolean;
-    roleId?: string;
+    isActive: boolean;
+    isEmailVerified: boolean;
+    roleId: string;
+    role?: {
+      id: string;
+      name: string;
+      description?: string;
+      access: any;
+    };
   }
 }

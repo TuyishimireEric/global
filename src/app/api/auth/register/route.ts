@@ -1,92 +1,129 @@
+// app/api/auth/register/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { registerUser, emailExists } from "@/server/queries";
 import { HttpStatusCode } from "axios";
-import { registerSchema } from "@/utils/validations/userValidations";
-import {
-  addNewUser,
-  addOrganizationUser,
-  addVerificationToken,
-  userAlreadyExist,
-} from "@/server/queries";
-import { generateUserCode } from "@/utils/functions";
-import { UserType } from "@/types";
-import bcrypt from "bcryptjs";
-import { sendUserVerificationEmailWithRetry } from "@/utils/jobs/events";
+import { z } from "zod";
 
-export async function POST(req: NextRequest) {
-  const formData = await req.json();
+// Validation schema
+const registerSchema = z.object({
+  firstName: z.string()
+    .min(1, "First name is required")
+    .max(50, "First name must be less than 50 characters")
+    .regex(/^[a-zA-Z\s]+$/, "First name can only contain letters and spaces"),
+  
+  lastName: z.string()
+    .min(1, "Last name is required")
+    .max(50, "Last name must be less than 50 characters")
+    .regex(/^[a-zA-Z\s]+$/, "Last name can only contain letters and spaces"),
+  
+  email: z.string()
+    .email("Please enter a valid email address")
+    .min(1, "Email is required")
+    .max(100, "Email must be less than 100 characters")
+    .toLowerCase(),
+  
+  password: z.string()
+    .min(8, "Password must be at least 8 characters long")
+    .max(100, "Password must be less than 100 characters")
+    .regex(/(?=.*[a-z])/, "Password must contain at least one lowercase letter")
+    .regex(/(?=.*[A-Z])/, "Password must contain at least one uppercase letter")
+    .regex(/(?=.*\d)/, "Password must contain at least one number"),
+});
 
-  const validation = registerSchema.safeParse(formData);
-  if (!validation.success) {
-    return NextResponse.json(
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+
+    // Validate input data
+    const validationResult = registerSchema.safeParse(body);
+    
+    if (!validationResult.success) {
+       return NextResponse.json(
       {
         status: "Error",
         data: null,
-        message: `Validation Error: ${validation.error.errors[0].message}`,
+        message: `Validation Error: ${validationResult.error.issues[0].message}`,
       },
       { status: HttpStatusCode.BadRequest }
     );
-  }
+    
+    }
 
-  const { Email, UserRole, Password } = formData;
+    const { firstName, lastName, email, password } = validationResult.data;
 
-  try {
-
-    const existingUser = await userAlreadyExist(Email);
-
-    if (existingUser) {
+    // Check if user already exists
+    const userExists = await emailExists(email);
+    
+    if (userExists) {
       return NextResponse.json(
-        {
-          status: "Error",
-          data: null,
-          message: "User already exists! Please login.",
-        },
-        { status: HttpStatusCode.BadRequest }
+        { error: "An account with this email already exists" },
+        { status: 409 }
       );
     }
 
-    const hashedPassword = await bcrypt.hash(Password, 10);
-
-    const newUser = await addNewUser({
-      ...formData,
-      Password: hashedPassword,
+    // Create new user
+    const newUser = await registerUser({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      email: email.toLowerCase().trim(),
+      password,
+      isActive: true,
+      isEmailVerified: false, // Will be verified via email later
+      roleId: process.env.DEFAULT_ROLE_ID || "default-role-id", // Set default role
     });
 
-    console.log({ formData });
+    // Return success response (without sensitive data)
+    return NextResponse.json({
+      message: "Account created successfully",
+      user: {
+        id: newUser.id,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        email: newUser.email,
+        isActive: newUser.isActive,
+        isEmailVerified: newUser.isEmailVerified,
+      }
+    }, { status: 201 });
 
-    const RoleId =
-      UserRole === UserType.PARENT ? 6 : UserRole == UserType.STUDENT ? 2 : 5;
-
-    await addOrganizationUser({
-      UserId: newUser[0].Id,
-      OrganizationId: process.env.DEFAULT_ORG_ID as string,
-      RoleId,
-    });
-
-    const Token = generateUserCode(formData.FullName);
-
-    await addVerificationToken(newUser[0].Id, Token);
-
-    const verify = {
-      Email: formData.Email,
-      FullName: formData.FullName,
-      Token,
-    };
-
-    await sendUserVerificationEmailWithRetry(verify);
+  } catch (error) {
+    console.error("Registration error:", error);
+    
+    // Handle database constraint errors
+    if (error instanceof Error && error.message.includes("unique constraint")) {
+      return NextResponse.json(
+        { error: "An account with this email already exists" },
+        { status: 409 }
+      );
+    }
 
     return NextResponse.json(
-      {
-        status: "Success",
-        message: "Registered successfully!",
-        data: newUser[0].Id,
+      { 
+        error: "Internal server error",
+        message: "Something went wrong. Please try again later."
       },
-      { status: HttpStatusCode.Created }
-    );
-  } catch (err: unknown) {
-    const error = err as Error;
-    return NextResponse.json(
-      { status: "Error", data: null, message: error.message },
-      { status: HttpStatusCode.InternalServerError }
+      { status: 500 }
     );
   }
+}
+
+// Handle unsupported methods
+export async function GET() {
+  return NextResponse.json(
+    { error: "Method not allowed" },
+    { status: 405 }
+  );
+}
+
+export async function PUT() {
+  return NextResponse.json(
+    { error: "Method not allowed" },
+    { status: 405 }
+  );
+}
+
+export async function DELETE() {
+  return NextResponse.json(
+    { error: "Method not allowed" },
+    { status: 405 }
+  );
 }

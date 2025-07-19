@@ -42,9 +42,9 @@ export const options: NextAuthOptions = {
             throw new Error("Account is deactivated. Please contact support.");
           }
 
-          if (!user.isEmailVerified) {
-            throw new Error("Please verify your email before signing in");
-          }
+          // if (!user.isEmailVerified) {
+          //   throw new Error("Please verify your email before signing in");
+          // }
 
           // Return user object with role data for session
           return {
@@ -143,7 +143,7 @@ export const options: NextAuthOptions = {
     async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
-        token.sessionToken = user.sessionToken;
+        token.sessionToken = user.sessionToken ?? "";
         token.email = user.email;
         token.name = user.name;
         token.image = user.image;
@@ -163,7 +163,7 @@ export const options: NextAuthOptions = {
           token.isActive = updatedUser.isActive;
           token.isEmailVerified = updatedUser.isEmailVerified;
           token.roleId = updatedUser.roleId;
-          token.role = null; // No role object, just roleId
+          token.role = undefined; // No role object, just roleId
         }
       }
 
@@ -195,7 +195,6 @@ export const options: NextAuthOptions = {
   },
 
   pages: {
-    signIn: "/auth/signin",
     error: "/auth/error",
   },
 

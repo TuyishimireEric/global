@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
+import { signIn, getSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import {
   Eye,
   EyeOff,
@@ -11,10 +13,8 @@ import {
   CheckCircle2,
   Loader2,
   Shield,
-  Zap,
-  Globe,
-  ArrowRight,
   Building2,
+  ArrowRight,
 } from "lucide-react";
 
 // Google Icon Component
@@ -155,6 +155,9 @@ const AuthPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [apiError, setApiError] = useState("");
+  
+  const router = useRouter();
 
   // Form data
   const [loginData, setLoginData] = useState({
@@ -181,6 +184,7 @@ const AuthPage: React.FC = () => {
     if (loginErrors[name]) {
       setLoginErrors(prev => ({ ...prev, [name]: "" }));
     }
+    if (apiError) setApiError("");
   };
 
   const handleRegisterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -189,6 +193,7 @@ const AuthPage: React.FC = () => {
     if (registerErrors[name]) {
       setRegisterErrors(prev => ({ ...prev, [name]: "" }));
     }
+    if (apiError) setApiError("");
   };
 
   // Validation on blur
@@ -262,36 +267,103 @@ const AuthPage: React.FC = () => {
     if (!validateLoginForm()) return;
 
     setIsLoading(true);
-    setTimeout(() => {
+    setApiError("");
+
+    try {
+      const result = await signIn("credentials", {
+        email: loginData.email,
+        password: loginData.password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setApiError(result.error);
+      } else if (result?.ok) {
+        setShowSuccess(true);
+        // Wait for success message, then redirect
+        setTimeout(() => {
+          router.push("/");
+        }, 1500);
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      setApiError("An unexpected error occurred. Please try again.");
+    } finally {
       setIsLoading(false);
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-    }, 1500);
+    }
   };
 
   const handleRegisterSubmit = async () => {
     if (!validateRegisterForm()) return;
 
     setIsLoading(true);
-    setTimeout(() => {
+    setApiError("");
+
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          firstName: registerData.firstName,
+          lastName: registerData.lastName,
+          email: registerData.email,
+          password: registerData.password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setApiError(data.error || "Registration failed");
+        return;
+      }
+
+      // Registration successful, now sign in automatically
+      const signInResult = await signIn("credentials", {
+        email: registerData.email,
+        password: registerData.password,
+        redirect: false,
+      });
+
+      if (signInResult?.ok) {
+        setShowSuccess(true);
+        setTimeout(() => {
+          router.push("/");
+        }, 1500);
+      } else {
+        // Registration successful but auto-login failed
+        setShowSuccess(true);
+        setTimeout(() => {
+          setIsLogin(true); // Switch to login form
+          setLoginData({ email: registerData.email, password: "" });
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("Registration error:", error);
+      setApiError("An unexpected error occurred. Please try again.");
+    } finally {
       setIsLoading(false);
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-    }, 1500);
+    }
   };
 
   const handleGoogleAuth = async () => {
     setIsGoogleLoading(true);
-    setTimeout(() => {
+    setApiError("");
+
+    try {
+      await signIn("google", { callbackUrl: "/dashboard" });
+    } catch (error) {
+      console.error("Google auth error:", error);
+      setApiError("Google authentication failed. Please try again.");
       setIsGoogleLoading(false);
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-    }, 1000);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header - matching the parts page style */}
+      {/* Header */}
       <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 shadow-md">
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
@@ -330,28 +402,22 @@ const AuthPage: React.FC = () => {
 
       <div className="max-w-6xl mx-auto px-4 py-6">
         <div className="flex flex-col lg:flex-row items-center gap-16">
-
-          {/* Right Panel - Auth Form */}
           <div className="lg:w-full w-full max-w-2xl mx-auto">
             <div className="bg-white border border-gray-200 rounded-xl shadow-xl p-6">
               
-              {/* Enhanced Tab Switcher */}
+              {/* Tab Switcher */}
               <div className="relative bg-gray-100 rounded-2xl p-1.5 mb-8">
-                {/* Animated Background Slider */}
                 <div 
                   className={`absolute top-1.5 left-1.5 w-[calc(50%-3px)] h-[calc(100%-12px)] bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-xl shadow-lg transition-transform duration-300 ease-out ${
                     isLogin ? 'transform translate-x-0' : 'transform translate-x-full'
                   }`}
                 />
                 
-                {/* Tab Buttons */}
                 <div className="relative flex">
                   <button
                     onClick={() => setIsLogin(true)}
                     className={`cursor-pointer flex-1 py-3 px-6 rounded-xl font-bold text-sm transition-all duration-300 relative z-10 ${
-                      isLogin
-                        ? "text-white"
-                        : "text-gray-600 hover:text-gray-800"
+                      isLogin ? "text-white" : "text-gray-600 hover:text-gray-800"
                     }`}
                   >
                     <div className="flex items-center justify-center space-x-2">
@@ -362,9 +428,7 @@ const AuthPage: React.FC = () => {
                   <button
                     onClick={() => setIsLogin(false)}
                     className={`cursor-pointer flex-1 py-3 px-6 rounded-xl font-bold text-sm transition-all duration-300 relative z-10 ${
-                      !isLogin
-                        ? "text-white"
-                        : "text-gray-600 hover:text-gray-800"
+                      !isLogin ? "text-white" : "text-gray-600 hover:text-gray-800"
                     }`}
                   >
                     <div className="flex items-center justify-center space-x-2">
@@ -374,6 +438,16 @@ const AuthPage: React.FC = () => {
                   </button>
                 </div>
               </div>
+
+              {/* API Error Display */}
+              {apiError && (
+                <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
+                  <div className="flex items-start space-x-3">
+                    <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                    <div className="text-red-700 text-sm">{apiError}</div>
+                  </div>
+                </div>
+              )}
 
               <div className="relative">
                 {isLogin ? (
