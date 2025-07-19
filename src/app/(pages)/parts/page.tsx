@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -18,10 +18,11 @@ import {
   Award,
   Settings,
   LucideIcon,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
-import { Part } from "@/types";
-import { sampleParts } from "@/utils/constants";
-import { PartCard } from "@/components/parts/PartCard";
+import { TransformedPart, FrontendFilters } from "@/types/parts";
+import useClientParts, { usePartsMetadata } from "@/hooks/parts/useClientParts";
 
 interface QuoteItem {
   partId: string;
@@ -29,21 +30,19 @@ interface QuoteItem {
 }
 
 const PartsListing: React.FC = () => {
-  const [parts, setParts] = useState<Part[]>([]);
-  const [filteredParts, setFilteredParts] = useState<Part[]>([]);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedFilters, setSelectedFilters] = useState({
-    category: [] as string[],
-    manufacturer: [] as string[],
-    availability: [] as string[],
-    priceRange: [0, 5000] as [number, number],
+  const [selectedFilters, setSelectedFilters] = useState<FrontendFilters>({
+    category: [],
+    manufacturer: [],
+    availability: [],
+    priceRange: [0, 5000],
     rating: 0,
     featured: false,
     inStock: false,
   });
   const [sortBy, setSortBy] = useState("relevance");
-  const quoteItems = useState<QuoteItem[]>([]);
+  const [quoteItems] = useState<QuoteItem[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [expandedSections, setExpandedSections] = useState({
@@ -57,93 +56,125 @@ const PartsListing: React.FC = () => {
 
   const itemsPerPage = 12;
 
-  useEffect(() => {
-    setParts(sampleParts);
-    setFilteredParts(sampleParts);
-  }, []);
+  // Backend query parameters
+  const backendParams = useMemo(
+    () => ({
+      page: currentPage,
+      limit: itemsPerPage,
+      searchText: searchQuery || undefined,
+      category:
+        selectedFilters.category.length > 0
+          ? selectedFilters.category[0]
+          : undefined,
+      brand:
+        selectedFilters.manufacturer.length > 0
+          ? selectedFilters.manufacturer[0]
+          : undefined,
+      minPrice:
+        selectedFilters.priceRange[0] > 0
+          ? selectedFilters.priceRange[0]
+          : undefined,
+      maxPrice:
+        selectedFilters.priceRange[1] < 5000
+          ? selectedFilters.priceRange[1]
+          : undefined,
+      isActive: true, // Only show active parts
+    }),
+    [currentPage, searchQuery, selectedFilters]
+  );
 
-  // Enhanced filtering logic
-  useEffect(() => {
-    const filtered = parts.filter((part) => {
-      const matchesSearch =
-        !searchQuery ||
-        part.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        part.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        part.compatibility.some((model) =>
-          model.toLowerCase().includes(searchQuery.toLowerCase())
-        );
+  // Fetch parts using React Query
+  const {
+    parts: backendParts,
+    totalCount,
+    totalPages,
+    isLoading,
+    isError,
+    error,
+    isFetching,
+    refetch,
+  } = useClientParts(backendParams);
 
-      const matchesCategory =
-        selectedFilters.category.length === 0 ||
-        selectedFilters.category.includes(part.category);
+  // Fetch metadata for filters
+  const {
+    categories,
+    brands,
+    isLoading: isMetadataLoading,
+  } = usePartsMetadata();
 
-      const matchesManufacturer =
-        selectedFilters.manufacturer.length === 0 ||
-        selectedFilters.manufacturer.includes(part.manufacturer);
+  // Apply frontend-only filters and sorting
+  const filteredParts = useMemo(() => {
+    let filtered = [...backendParts];
 
-      const matchesAvailability =
-        selectedFilters.availability.length === 0 ||
-        selectedFilters.availability.includes(part.availability);
-
-      const matchesPrice =
-        part.price >= selectedFilters.priceRange[0] &&
-        part.price <= selectedFilters.priceRange[1];
-
-      const matchesRating =
-        selectedFilters.rating === 0 ||
-        (part.rating && part.rating >= selectedFilters.rating);
-
-      const matchesFeatured = !selectedFilters.featured || part.featured;
-
-      const matchesInStock =
-        !selectedFilters.inStock || part.availability === "in-stock";
-
-      return (
-        matchesSearch &&
-        matchesCategory &&
-        matchesManufacturer &&
-        matchesAvailability &&
-        matchesPrice &&
-        matchesRating &&
-        matchesFeatured &&
-        matchesInStock
+    // Apply frontend-only filters that backend doesn't handle
+    if (selectedFilters.manufacturer.length > 1) {
+      // If multiple manufacturers selected, filter client-side
+      filtered = filtered.filter((part) =>
+        selectedFilters.manufacturer.includes(part.manufacturer)
       );
-    });
+    }
 
-    // Enhanced sorting
+    if (selectedFilters.category.length > 1) {
+      // If multiple categories selected, filter client-side
+      filtered = filtered.filter((part) =>
+        selectedFilters.category.includes(part.category)
+      );
+    }
+
+    if (selectedFilters.availability.length > 0) {
+      filtered = filtered.filter((part) =>
+        selectedFilters.availability.includes(part.availability)
+      );
+    }
+
+    if (selectedFilters.rating > 0) {
+      filtered = filtered.filter(
+        (part) => part.rating >= selectedFilters.rating
+      );
+    }
+
+    if (selectedFilters.featured) {
+      filtered = filtered.filter((part) => part.featured);
+    }
+
+    if (selectedFilters.inStock) {
+      filtered = filtered.filter((part) => part.availability === "in-stock");
+    }
+
+    // Apply sorting
     switch (sortBy) {
       case "price-asc":
-        filtered.sort((a, b) => a.price - b.price);
+        filtered.sort((a, b) => a.priceNumber - b.priceNumber);
         break;
       case "price-desc":
-        filtered.sort((a, b) => b.price - a.price);
+        filtered.sort((a, b) => b.priceNumber - a.priceNumber);
         break;
       case "stock":
         filtered.sort((a, b) => b.stockQty - a.stockQty);
         break;
       case "discount":
-        filtered.sort((a, b) => (b.discount || 0) - (a.discount || 0));
+        filtered.sort((a, b) => b.discountNumber - a.discountNumber);
         break;
       case "rating":
-        filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+        filtered.sort((a, b) => b.rating - a.rating);
         break;
       default:
+        // Relevance sorting with availability priority
         filtered.sort((a, b) => {
           const aScore =
             (a.availability === "in-stock" ? 100 : 0) +
-            (a.discount || 0) +
+            a.discountNumber +
             (a.featured ? 50 : 0);
           const bScore =
             (b.availability === "in-stock" ? 100 : 0) +
-            (b.discount || 0) +
+            b.discountNumber +
             (b.featured ? 50 : 0);
           return bScore - aScore;
         });
     }
 
-    setFilteredParts(filtered);
-    setCurrentPage(1);
-  }, [parts, searchQuery, selectedFilters, sortBy]);
+    return filtered;
+  }, [backendParts, selectedFilters, sortBy]);
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections((prev) => ({
@@ -153,13 +184,14 @@ const PartsListing: React.FC = () => {
   };
 
   const handleFilterChange = (
-    filterType: keyof typeof selectedFilters,
-    value: number[]
+    filterType: keyof FrontendFilters,
+    value: any
   ) => {
     setSelectedFilters((prev) => ({
       ...prev,
       [filterType]: value,
     }));
+    setCurrentPage(1); // Reset to first page when filters change
   };
 
   const toggleArrayFilter = (
@@ -172,6 +204,7 @@ const PartsListing: React.FC = () => {
         ? prev[filterType].filter((item) => item !== value)
         : [...prev[filterType], value],
     }));
+    setCurrentPage(1);
   };
 
   const clearAllFilters = () => {
@@ -185,6 +218,7 @@ const PartsListing: React.FC = () => {
       inStock: false,
     });
     setSearchQuery("");
+    setCurrentPage(1);
   };
 
   const getActiveFilterCount = () => {
@@ -234,28 +268,28 @@ const PartsListing: React.FC = () => {
   );
 
   const Sidebar = () => {
-    const categories = [...new Set(parts.map((part) => part.category))];
-    const manufacturers = [...new Set(parts.map((part) => part.manufacturer))];
     const availabilityOptions = [
       {
         value: "in-stock",
         label: "In Stock",
-        count: parts.filter((p) => p.availability === "in-stock").length,
+        count: backendParts.filter((p) => p.availability === "in-stock").length,
       },
       {
         value: "low-stock",
         label: "Low Stock",
-        count: parts.filter((p) => p.availability === "low-stock").length,
+        count: backendParts.filter((p) => p.availability === "low-stock")
+          .length,
       },
       {
         value: "on-order",
         label: "On Order",
-        count: parts.filter((p) => p.availability === "on-order").length,
+        count: backendParts.filter((p) => p.availability === "on-order").length,
       },
       {
         value: "out-stock",
         label: "Out of Stock",
-        count: parts.filter((p) => p.availability === "out-stock").length,
+        count: backendParts.filter((p) => p.availability === "out-stock")
+          .length,
       },
     ];
 
@@ -269,9 +303,15 @@ const PartsListing: React.FC = () => {
               type="text"
               placeholder="Search parts..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
               className="w-full pl-9 pr-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-800 placeholder-gray-400 focus:border-yellow-500 focus:ring-1 focus:ring-yellow-200 focus:outline-none transition-all duration-300"
             />
+            {isFetching && (
+              <RefreshCw className="absolute right-3 top-1/2 transform -translate-y-1/2 text-yellow-500 h-4 w-4 animate-spin" />
+            )}
           </div>
         </div>
 
@@ -297,60 +337,72 @@ const PartsListing: React.FC = () => {
 
         {/* Category Filter */}
         <FilterSection title="Category" icon={Settings} section="category">
-          {categories.map((category) => {
-            const count = parts.filter((p) => p.category === category).length;
-            return (
-              <label
-                key={category}
-                className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1.5 rounded-md transition-colors"
-              >
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={selectedFilters.category.includes(category)}
-                    onChange={() => toggleArrayFilter("category", category)}
-                    className="rounded border-gray-300 text-yellow-600 focus:ring-yellow-500 focus:ring-offset-0 mr-2 h-3.5 w-3.5"
-                  />
-                  <span className="text-xs text-gray-700">{category}</span>
-                </div>
-                <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full">
-                  {count}
-                </span>
-              </label>
-            );
-          })}
+          {isMetadataLoading ? (
+            <div className="text-xs text-gray-500">Loading categories...</div>
+          ) : (
+            categories.map((category) => {
+              const count = backendParts.filter(
+                (p) => p.category === category
+              ).length;
+              return (
+                <label
+                  key={category}
+                  className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1.5 rounded-md transition-colors"
+                >
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedFilters.category.includes(category)}
+                      onChange={() => toggleArrayFilter("category", category)}
+                      className="rounded border-gray-300 text-yellow-600 focus:ring-yellow-500 focus:ring-offset-0 mr-2 h-3.5 w-3.5"
+                    />
+                    <span className="text-xs text-gray-700">{category}</span>
+                  </div>
+                  <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                    {count}
+                  </span>
+                </label>
+              );
+            })
+          )}
         </FilterSection>
 
         {/* Manufacturer Filter */}
         <FilterSection title="Manufacturer" icon={Award} section="manufacturer">
-          {manufacturers.map((manufacturer) => {
-            const count = parts.filter(
-              (p) => p.manufacturer === manufacturer
-            ).length;
-            return (
-              <label
-                key={manufacturer}
-                className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1.5 rounded-md transition-colors"
-              >
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={selectedFilters.manufacturer.includes(
-                      manufacturer
-                    )}
-                    onChange={() =>
-                      toggleArrayFilter("manufacturer", manufacturer)
-                    }
-                    className="rounded border-gray-300 text-yellow-600 focus:ring-yellow-500 focus:ring-offset-0 mr-2 h-3.5 w-3.5"
-                  />
-                  <span className="text-xs text-gray-700">{manufacturer}</span>
-                </div>
-                <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full">
-                  {count}
-                </span>
-              </label>
-            );
-          })}
+          {isMetadataLoading ? (
+            <div className="text-xs text-gray-500">
+              Loading manufacturers...
+            </div>
+          ) : (
+            brands.map((brand) => {
+              const count = backendParts.filter(
+                (p) => p.manufacturer === brand
+              ).length;
+              return (
+                <label
+                  key={brand}
+                  className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-1.5 rounded-md transition-colors"
+                >
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedFilters.manufacturer.includes(
+                        brand ?? ""
+                      )}
+                      onChange={() =>
+                        toggleArrayFilter("manufacturer", brand ?? "")
+                      }
+                      className="rounded border-gray-300 text-yellow-600 focus:ring-yellow-500 focus:ring-offset-0 mr-2 h-3.5 w-3.5"
+                    />
+                    <span className="text-xs text-gray-700">{brand}</span>
+                  </div>
+                  <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                    {count}
+                  </span>
+                </label>
+              );
+            })
+          )}
         </FilterSection>
 
         {/* Availability Filter */}
@@ -439,7 +491,7 @@ const PartsListing: React.FC = () => {
                 type="radio"
                 name="rating"
                 checked={selectedFilters.rating === rating}
-                onChange={() => handleFilterChange("rating", [rating])}
+                onChange={() => handleFilterChange("rating", rating)}
                 className="mr-2 text-yellow-600 focus:ring-yellow-500 h-3.5 w-3.5"
               />
               <div className="flex items-center">
@@ -464,17 +516,8 @@ const PartsListing: React.FC = () => {
           <label className="flex items-center cursor-pointer hover:bg-gray-50 p-1.5 rounded-md transition-colors">
             <input
               type="checkbox"
-              checked={selectedFilters.featured}
-              // onChange={(e) => handleFilterChange("featured", e.target.checked)}
-              className="rounded border-gray-300 text-yellow-600 focus:ring-yellow-500 focus:ring-offset-0 mr-2 h-3.5 w-3.5"
-            />
-            <span className="text-xs text-gray-700">Featured Items</span>
-          </label>
-          <label className="flex items-center cursor-pointer hover:bg-gray-50 p-1.5 rounded-md transition-colors">
-            <input
-              type="checkbox"
               checked={selectedFilters.inStock}
-              // onChange={(e) => handleFilterChange("inStock", e.target.checked)}
+              onChange={(e) => handleFilterChange("inStock", e.target.checked)}
               className="rounded border-gray-300 text-yellow-600 focus:ring-yellow-500 focus:ring-offset-0 mr-2 h-3.5 w-3.5"
             />
             <span className="text-xs text-gray-700">In Stock Only</span>
@@ -484,13 +527,30 @@ const PartsListing: React.FC = () => {
     );
   };
 
-  const currentParts = filteredParts.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  const totalPages = Math.ceil(filteredParts.length / itemsPerPage);
   const quoteTotal = 0;
+
+  // Error state
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white border border-red-200 rounded-xl p-8 max-w-md mx-auto shadow-sm">
+          <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h3 className="text-xl font-bold text-gray-900 mb-2">
+            Error Loading Parts
+          </h3>
+          <p className="text-gray-600 mb-4">
+            {error?.message || "Something went wrong"}
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="bg-gradient-to-r from-yellow-500 to-yellow-600 text-white px-6 py-2 rounded-lg font-bold hover:shadow-md hover:shadow-yellow-500/30 transition-all duration-300 w-full"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -602,10 +662,20 @@ const PartsListing: React.FC = () => {
               <div className="flex items-center space-x-4">
                 <span className="text-gray-700">
                   <strong className="text-yellow-600">
-                    {filteredParts.length}
+                    {isLoading ? "Loading..." : filteredParts.length}
                   </strong>{" "}
                   parts found
+                  {totalCount > filteredParts.length && (
+                    <span className="text-sm text-gray-500 ml-2">
+                      (of {totalCount} total)
+                    </span>
+                  )}
                 </span>
+
+                {/* Loading indicator */}
+                {isFetching && (
+                  <RefreshCw className="h-4 w-4 text-yellow-500 animate-spin" />
+                )}
 
                 {/* Active Filters Display */}
                 {getActiveFilterCount() > 0 && (
@@ -689,23 +759,44 @@ const PartsListing: React.FC = () => {
               </div>
             </div>
 
-            {/* Parts Grid */}
-            <div
-              className={`grid gap-6 mb-8 ${
-                viewMode === "grid"
-                  ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
-                  : "grid-cols-1"
-              }`}
-            >
-              <AnimatePresence>
-                {currentParts.map((part) => (
-                  <PartCard key={part.id} part={part} />
+            {/* Loading State */}
+            {isLoading && (
+              <div className="grid gap-6 mb-8 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="bg-white border border-gray-200 rounded-xl p-6 animate-pulse"
+                  >
+                    <div className="h-48 bg-gray-200 rounded-lg mb-4"></div>
+                    <div className="space-y-3">
+                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                      <div className="h-6 bg-gray-200 rounded w-1/3"></div>
+                    </div>
+                  </div>
                 ))}
-              </AnimatePresence>
-            </div>
+              </div>
+            )}
+
+            {/* Parts Grid */}
+            {!isLoading && (
+              <div
+                className={`grid gap-6 mb-8 ${
+                  viewMode === "grid"
+                    ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+                    : "grid-cols-1"
+                }`}
+              >
+                <AnimatePresence>
+                  {filteredParts.map((part) => (
+                    <PartCard key={part.id} part={part} />
+                  ))}
+                </AnimatePresence>
+              </div>
+            )}
 
             {/* Pagination */}
-            {totalPages > 1 && (
+            {!isLoading && totalPages > 1 && (
               <div className="flex items-center justify-center space-x-2">
                 <motion.button
                   whileHover={{ scale: 1.05 }}
@@ -751,7 +842,7 @@ const PartsListing: React.FC = () => {
             )}
 
             {/* No Results */}
-            {filteredParts.length === 0 && (
+            {!isLoading && filteredParts.length === 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -778,6 +869,104 @@ const PartsListing: React.FC = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+// Simple PartCard component for demonstration
+const PartCard: React.FC<{ part: TransformedPart }> = ({ part }) => {
+  const availabilityColor = {
+    "in-stock": "text-green-600 bg-green-50",
+    "low-stock": "text-yellow-600 bg-yellow-50",
+    "on-order": "text-blue-600 bg-blue-50",
+    "out-stock": "text-red-600 bg-red-50",
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all duration-300"
+    >
+      {/* Image */}
+      <div className="aspect-square rounded-lg overflow-hidden mb-4 bg-gray-100">
+        {part.images.length > 0 ? (
+          <img
+            src={part.images[0]}
+            alt={part.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Package className="h-16 w-16 text-gray-400" />
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="space-y-3">
+        <div>
+          <h3 className="font-bold text-gray-900 text-lg">{part.name}</h3>
+          <p className="text-sm text-gray-600">SKU: {part.sku}</p>
+          <p className="text-sm text-gray-600">Category: {part.category}</p>
+          {part.manufacturer && (
+            <p className="text-sm text-gray-600">Brand: {part.manufacturer}</p>
+          )}
+        </div>
+
+        {part.description && (
+          <p className="text-sm text-gray-700 line-clamp-2">
+            {part.description}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center space-x-2">
+              <span className="text-2xl font-bold text-gray-900">
+                ${part.priceNumber.toFixed(2)}
+              </span>
+              {part.discountNumber > 0 && (
+                <span className="text-sm bg-red-100 text-red-600 px-2 py-1 rounded-full">
+                  -{part.discountNumber}%
+                </span>
+              )}
+            </div>
+            <div
+              className={`text-xs px-2 py-1 rounded-full ${
+                availabilityColor[part.availability]
+              }`}
+            >
+              {part.availability.replace("-", " ").toUpperCase()}
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-1">
+            {Array.from({ length: 5 }, (_, i) => (
+              <Star
+                key={i}
+                className={`h-4 w-4 ${
+                  i < Math.floor(part.rating)
+                    ? "text-yellow-500 fill-current"
+                    : "text-gray-300"
+                }`}
+              />
+            ))}
+            <span className="text-sm text-gray-600 ml-1">
+              ({part.rating.toFixed(1)})
+            </span>
+          </div>
+        </div>
+
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 text-white py-3 rounded-lg font-bold hover:shadow-md hover:shadow-yellow-500/30 transition-all duration-300"
+        >
+          Add to Quote
+        </motion.button>
+      </div>
+    </motion.div>
   );
 };
 

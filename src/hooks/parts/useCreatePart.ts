@@ -22,13 +22,6 @@ export interface PartFormData {
   isActive: boolean;
 }
 
-interface ApiResponse {
-  status: string;
-  message: string;
-  data: any;
-}
-
-
 export const useCreatePart = () => {
   const queryClient = useQueryClient();
 
