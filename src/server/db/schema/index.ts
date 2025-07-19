@@ -433,6 +433,15 @@ export const stockTransactionsRelations = relations(StockTransactions, ({ one })
   }),
 }));
 
+export const sessions = pgTable("sessions", {
+  sessionToken: varchar("SessionToken").primaryKey(),
+  userId: uuid("UserId")
+    .notNull()
+    .references(() => Users.id, { onDelete: "cascade" }),
+  expires: timestamp("expires", { mode: "date" }).notNull(),
+});
+
+
 // Export all tables for easy access
 export const schema = {
   Roles,
