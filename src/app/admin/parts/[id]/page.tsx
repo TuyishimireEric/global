@@ -1,515 +1,1095 @@
 "use client";
 
 import React, { useState } from "react";
+import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
   Plus,
-  Search,
-  Filter,
-  Edit2,
-  Trash2,
+  Minus,
+  Share2,
+  FileText,
+  Zap,
+  Star,
   Package,
-  MapPin,
-  Calendar,
-  Barcode,
+  Wrench,
+  ChevronRight,
+  Eye,
+  Heart,
+  Truck,
+  Shield,
+  Clock,
+  Award,
   CheckCircle,
   AlertCircle,
-  Clock,
-  X,
-  Save,
-  Settings,
-  Eye,
+  Info,
   Download,
-  Upload,
-  RefreshCw,
-  Archive,
+  Phone,
+  Mail,
+  Settings,
+  X,
+  Loader2,
+  Edit,
+  Trash2,
+  Search,
+  Filter,
+  MoreHorizontal,
+  MapPin,
+  Calendar,
   Building2,
-  User
+  Barcode,
+  Archive,
+  RefreshCw,
+  ExternalLink,
+  Database,
+  Users,
+  TrendingUp,
+  DollarSign,
+  Grid3X3,
+  List,
+  SortAsc,
+  Copy,
 } from "lucide-react";
+import { usePartById } from "@/hooks/parts/usePartById";
 
-// Types
-interface Part {
+// Real API data types
+interface CreatedBy {
   id: string;
-  name: string;
-  sku: string;
-  category: string;
-  manufacturer: string;
-  price: number;
-  description: string;
-  specifications: Record<string, string>;
-  partNumber: string;
-  oem: boolean;
-  totalStock: number;
-  minStockLevel: number;
-  maxStockLevel: number;
+  firstName: string;
+  lastName: string;
 }
 
-interface InventoryItem {
+interface Dimensions {
+  unit: string;
+  height: number;
+  diameter: number;
+}
+
+interface Part {
   id: string;
-  barcode: string;
+  partNumber: string;
+  name: string;
+  description: string;
+  brand: string;
+  category: string;
+  subcategory: string;
+  compatibleModels: string[];
+  specifications: Record<string, string>;
+  images: string[];
+  price: string;
+  discount: string;
+  costPrice: string;
+  weight: string;
+  dimensions: Dimensions;
+  minimumStock: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: CreatedBy;
+}
+
+interface Supplier {
+  id: string;
+  name: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+}
+
+interface PartItem {
+  id: string;
+  barCode: string;
   location: string;
+  shelvingLocation: string;
   addedOn: string;
-  status: "available" | "reserved" | "damaged" | "in-transit";
-  shelveLocation: string;
-  addedBy: string;
-  condition: "new" | "used" | "refurbished";
+  supplier: Supplier;
+  status: "available" | "reserved" | "sold" | "damaged";
+  condition: "new" | "refurbished" | "used";
+  purchasePrice: string;
+  serialNumber?: string;
   notes?: string;
 }
 
-interface Location {
-  id: string;
-  name: string;
-  address: string;
-}
-
-// Sample data
-const samplePart: Part = {
-  id: "1",
-  name: "Hydraulic Pump Assembly",
-  sku: "CAT-320-HP-001",
-  category: "Hydraulic System",
-  manufacturer: "Caterpillar",
-  price: 2450.00,
-  description: "High-performance hydraulic pump assembly designed for CAT 320 series excavators. Engineered to deliver optimal flow rates and pressure for maximum excavator performance. Built with premium materials and precision manufacturing for long-lasting durability.",
-  specifications: {
-    "Flow Rate": "165 L/min",
-    "Operating Pressure": "35 MPa",
-    "Port Size": "3/4 inch",
-    "Material": "Cast Iron with Steel Components",
-    "Temperature Range": "-20°C to +80°C",
-    "Seal Type": "Nitrile Rubber",
-    "Mounting": "SAE Standard",
-    "Filtration": "25 micron"
-  },
-  partNumber: "320-3064",
-  oem: true,
-  totalStock: 47,
-  minStockLevel: 10,
-  maxStockLevel: 100
-};
-
-const sampleLocations: Location[] = [
-  { id: "1", name: "Main Warehouse", address: "123 Industrial Ave, Phoenix, AZ" },
-  { id: "2", name: "East Coast DC", address: "456 Logistics Blvd, Atlanta, GA" },
-  { id: "3", name: "West Coast DC", address: "789 Supply Chain Dr, Los Angeles, CA" },
-  { id: "4", name: "Service Center", address: "321 Repair St, Houston, TX" }
-];
-
-const sampleInventoryItems: InventoryItem[] = [
+// Mock data for part items (replace with real API call)
+const mockPartItems: PartItem[] = [
   {
     id: "1",
-    barcode: "HP001-001-MW",
-    location: "Main Warehouse",
-    addedOn: "2024-07-15",
+    barCode: "1R0749001",
+    location: "Warehouse A",
+    shelvingLocation: "A-15-B3",
+    addedOn: "2024-06-15T10:30:00Z",
+    supplier: {
+      id: "s1",
+      name: "CAT Authorized Dealer",
+      contactPerson: "John Smith",
+      email: "john@catdealer.com",
+      phone: "+1-555-0123",
+    },
     status: "available",
-    shelveLocation: "A-12-03",
-    addedBy: "John Smith",
-    condition: "new"
+    condition: "new",
+    purchasePrice: "62.75",
+    serialNumber: "CAT1R0749SN001",
+    notes: "Direct from manufacturer",
   },
   {
     id: "2",
-    barcode: "HP001-002-MW",
-    location: "Main Warehouse",
-    addedOn: "2024-07-15",
+    barCode: "1R0749002",
+    location: "Warehouse A",
+    shelvingLocation: "A-15-B4",
+    addedOn: "2024-06-10T14:20:00Z",
+    supplier: {
+      id: "s1",
+      name: "CAT Authorized Dealer",
+      contactPerson: "John Smith",
+      email: "john@catdealer.com",
+      phone: "+1-555-0123",
+    },
     status: "available",
-    shelveLocation: "A-12-04",
-    addedBy: "John Smith",
-    condition: "new"
+    condition: "new",
+    purchasePrice: "62.75",
+    serialNumber: "CAT1R0749SN002",
   },
   {
     id: "3",
-    barcode: "HP001-003-EC",
-    location: "East Coast DC",
-    addedOn: "2024-07-12",
+    barCode: "1R0749003",
+    location: "Warehouse B",
+    shelvingLocation: "B-08-C1",
+    addedOn: "2024-06-05T09:15:00Z",
+    supplier: {
+      id: "s2",
+      name: "Global Parts Supply",
+      contactPerson: "Sarah Wilson",
+      email: "sarah@globalparts.com",
+      phone: "+1-555-0456",
+    },
     status: "reserved",
-    shelveLocation: "B-05-12",
-    addedBy: "Sarah Johnson",
     condition: "new",
-    notes: "Reserved for order #12345"
+    purchasePrice: "58.90",
+    serialNumber: "CAT1R0749SN003",
+    notes: "Reserved for Order #ORD-2024-1205",
   },
   {
     id: "4",
-    barcode: "HP001-004-WC",
-    location: "West Coast DC",
-    addedOn: "2024-07-10",
+    barCode: "1R0749004",
+    location: "Warehouse A",
+    shelvingLocation: "A-15-B5",
+    addedOn: "2024-05-28T16:45:00Z",
+    supplier: {
+      id: "s3",
+      name: "Reman Solutions Inc",
+      contactPerson: "Mike Johnson",
+      email: "mike@remansolutions.com",
+      phone: "+1-555-0789",
+    },
     status: "available",
-    shelveLocation: "C-08-07",
-    addedBy: "Mike Wilson",
-    condition: "refurbished"
+    condition: "refurbished",
+    purchasePrice: "45.20",
+    serialNumber: "REM1R0749SN004",
+    notes: "Professionally remanufactured",
   },
   {
     id: "5",
-    barcode: "HP001-005-MW",
-    location: "Main Warehouse",
-    addedOn: "2024-07-08",
+    barCode: "1R0749005",
+    location: "Warehouse C",
+    shelvingLocation: "C-22-A2",
+    addedOn: "2024-05-20T11:30:00Z",
+    supplier: {
+      id: "s1",
+      name: "CAT Authorized Dealer",
+      contactPerson: "John Smith",
+      email: "john@catdealer.com",
+      phone: "+1-555-0123",
+    },
     status: "damaged",
-    shelveLocation: "D-01-15",
-    addedBy: "John Smith",
-    condition: "used",
-    notes: "Hydraulic leak detected"
+    condition: "new",
+    purchasePrice: "62.75",
+    serialNumber: "CAT1R0749SN005",
+    notes: "Damaged during shipping - pending inspection",
   },
   {
     id: "6",
-    barcode: "HP001-006-SC",
-    location: "Service Center",
-    addedOn: "2024-07-05",
-    status: "in-transit",
-    shelveLocation: "TRANSIT",
-    addedBy: "Lisa Chen",
+    barCode: "1R0749006",
+    location: "Warehouse B",
+    shelvingLocation: "B-12-A1",
+    addedOn: "2024-06-18T08:15:00Z",
+    supplier: {
+      id: "s2",
+      name: "Global Parts Supply",
+      contactPerson: "Sarah Wilson",
+      email: "sarah@globalparts.com",
+      phone: "+1-555-0456",
+    },
+    status: "available",
     condition: "new",
-    notes: "Shipping to customer location"
-  }
+    purchasePrice: "59.95",
+    serialNumber: "CAT1R0749SN006",
+    notes: "Bulk order discount applied",
+  },
 ];
 
-const AdminPartDetail: React.FC = () => {
-  const [part] = useState<Part>(samplePart);
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(sampleInventoryItems);
-  const [locations] = useState<Location[]>(sampleLocations);
-  
-  // Filters and search
+const AdminProductDetails: React.FC = () => {
+  const params = useParams();
+  const partId = params.id as string;
+
+  const { data: product, isLoading, error } = usePartById(partId);
+  const [partItems] = useState<PartItem[]>(mockPartItems);
+  const [selectedImage, setSelectedImage] = useState(0);
+  const [activeTab, setActiveTab] = useState<string>("overview");
+  const [showImageModal, setShowImageModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [locationFilter, setLocationFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [conditionFilter, setConditionFilter] = useState("all");
-  
-  // Modal states
-  const [showAddItemModal, setShowAddItemModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-  
-  // Form state for new item
-  const [newItem, setNewItem] = useState({
-    barcode: "",
-    location: "",
-    shelveLocation: "",
-    condition: "new" as const,
-    notes: ""
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading product details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error || !product) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
+            Product Not Found
+          </h2>
+          <p className="text-gray-600">
+            The requested product could not be loaded.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate metrics
+  const totalStock = partItems.length;
+  const availableStock = partItems.filter(
+    (item) => item.status === "available"
+  ).length;
+  const reservedStock = partItems.filter(
+    (item) => item.status === "reserved"
+  ).length;
+  const averageCost =
+    partItems.reduce((sum, item) => sum + parseFloat(item.purchasePrice), 0) /
+    partItems.length;
+  const totalValue = partItems.reduce(
+    (sum, item) => sum + parseFloat(item.purchasePrice),
+    0
+  );
+
+  // Filter part items
+  const filteredItems = partItems.filter((item) => {
+    const matchesSearch =
+      item.barCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.shelvingLocation.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.supplier.name.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus =
+      statusFilter === "all" || item.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
   });
 
-  // Filter inventory items
-  const filteredItems = inventoryItems.filter(item => {
-    const matchesSearch = item.barcode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.shelveLocation.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.notes?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesLocation = locationFilter === "all" || item.location === locationFilter;
-    const matchesStatus = statusFilter === "all" || item.status === statusFilter;
-    const matchesCondition = conditionFilter === "all" || item.condition === conditionFilter;
-    
-    return matchesSearch && matchesLocation && matchesStatus && matchesCondition;
-  });
-
-  // Get status info
-  const getStatusInfo = (status: string) => {
-    switch (status) {
-      case "available":
-        return { icon: CheckCircle, color: "text-green-600 bg-green-50", label: "Available" };
-      case "reserved":
-        return { icon: Clock, color: "text-blue-600 bg-blue-50", label: "Reserved" };
-      case "damaged":
-        return { icon: AlertCircle, color: "text-red-600 bg-red-50", label: "Damaged" };
-      case "in-transit":
-        return { icon: Package, color: "text-purple-600 bg-purple-50", label: "In Transit" };
-      default:
-        return { icon: AlertCircle, color: "text-gray-600 bg-gray-50", label: status };
-    }
-  };
-
-  // Get condition badge color
-  const getConditionColor = (condition: string) => {
-    switch (condition) {
-      case "new":
-        return "bg-green-100 text-green-700";
-      case "used":
-        return "bg-yellow-100 text-yellow-700";
-      case "refurbished":
-        return "bg-blue-100 text-blue-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
-  };
-
-  // Handle add new item
-  const handleAddItem = () => {
-    if (!newItem.barcode || !newItem.location || !newItem.shelveLocation) {
-      return;
-    }
-
-    const item: InventoryItem = {
-      id: Date.now().toString(),
-      barcode: newItem.barcode,
-      location: newItem.location,
-      addedOn: new Date().toISOString().split('T')[0],
-      status: "available",
-      shelveLocation: newItem.shelveLocation,
-      addedBy: "Current User", // This would come from auth context
-      condition: newItem.condition,
-      notes: newItem.notes || undefined
+  const getStatusBadge = (status: string) => {
+    const statusConfig = {
+      available: {
+        color: "bg-green-100 text-green-800 border-green-200",
+        label: "Available",
+        icon: CheckCircle,
+      },
+      reserved: {
+        color: "bg-blue-100 text-blue-800 border-blue-200",
+        label: "Reserved",
+        icon: Clock,
+      },
+      sold: {
+        color: "bg-gray-100 text-gray-800 border-gray-200",
+        label: "Sold",
+        icon: CheckCircle,
+      },
+      damaged: {
+        color: "bg-red-100 text-red-800 border-red-200",
+        label: "Damaged",
+        icon: AlertCircle,
+      },
     };
 
-    setInventoryItems(prev => [item, ...prev]);
-    setNewItem({
-      barcode: "",
-      location: "",
-      shelveLocation: "",
-      condition: "new",
-      notes: ""
-    });
-    setShowAddItemModal(false);
-  };
+    const config =
+      statusConfig[status as keyof typeof statusConfig] ||
+      statusConfig.available;
+    const Icon = config.icon;
 
-  // Handle edit item
-  const handleEditItem = (item: InventoryItem) => {
-    setEditingItem(item);
-    setShowEditModal(true);
-  };
-
-  // Handle delete item
-  const handleDeleteItem = (itemId: string) => {
-    if (confirm("Are you sure you want to delete this inventory item?")) {
-      setInventoryItems(prev => prev.filter(item => item.id !== itemId));
-    }
-  };
-
-  // Handle update item status
-  const updateItemStatus = (itemId: string, newStatus: InventoryItem['status']) => {
-    setInventoryItems(prev => 
-      prev.map(item => 
-        item.id === itemId ? { ...item, status: newStatus } : item
-      )
+    return (
+      <div
+        className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium border ${config.color}`}
+      >
+        <Icon className="h-3 w-3" />
+        <span>{config.label}</span>
+      </div>
     );
   };
 
-  // Get stock level color
-  const getStockLevelColor = () => {
-    if (part.totalStock <= part.minStockLevel) return "text-red-600";
-    if (part.totalStock >= part.maxStockLevel) return "text-blue-600";
-    return "text-green-600";
+  const getConditionBadge = (condition: string) => {
+    const conditionConfig = {
+      new: {
+        color: "bg-emerald-100 text-emerald-800 border-emerald-200",
+        label: "New",
+      },
+      refurbished: {
+        color: "bg-amber-100 text-amber-800 border-amber-200",
+        label: "Refurbished",
+      },
+      used: {
+        color: "bg-slate-100 text-slate-800 border-slate-200",
+        label: "Used",
+      },
+    };
+
+    const config =
+      conditionConfig[condition as keyof typeof conditionConfig] ||
+      conditionConfig.new;
+
+    return (
+      <span
+        className={`px-2 py-1 rounded-full text-xs font-medium border ${config.color}`}
+      >
+        {config.label}
+      </span>
+    );
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedItems.length === filteredItems.length) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(filteredItems.map((item) => item.id));
+    }
+  };
+
+  const handleSelectItem = (itemId: string) => {
+    setSelectedItems((prev) =>
+      prev.includes(itemId)
+        ? prev.filter((id) => id !== itemId)
+        : [...prev, itemId]
+    );
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="bg-gray-100 hover:bg-gray-200 p-2 rounded-lg transition-colors"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </motion.button>
-              
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Part Administration
-                </h1>
-                <div className="flex items-center space-x-2 mt-1">
-                  <span className="text-gray-600 text-sm">SKU:</span>
-                  <span className="font-mono text-sm bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
-                    {part.sku}
-                  </span>
-                </div>
-              </div>
-            </div>
 
+
+      <div className="w-full px-4 py-6">
+        {/* Breadcrumb */}
+        <nav className="flex items-center space-x-2 text-sm text-gray-600 mb-6">
+          <span className="hover:text-blue-600 cursor-pointer">Admin</span>
+          <ChevronRight className="h-4 w-4" />
+          <span className="hover:text-blue-600 cursor-pointer">Products</span>
+          <ChevronRight className="h-4 w-4" />
+          <span className="text-gray-900 font-medium">{product.name}</span>
+        </nav>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
             <div className="flex items-center space-x-3">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="flex items-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors"
-              >
-                <Eye className="h-4 w-4" />
-                <span>View Product</span>
-              </motion.button>
-              
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                <Edit2 className="h-4 w-4" />
-                <span>Edit Part</span>
-              </motion.button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-8">
-        {/* Part Overview */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Part Info */}
-            <div className="lg:col-span-2">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 mb-2">{part.name}</h2>
-                  <div className="flex items-center space-x-4 text-sm text-gray-600">
-                    <span>Part #: <span className="font-mono">{part.partNumber}</span></span>
-                    <span>Category: {part.category}</span>
-                    <span>Manufacturer: {part.manufacturer}</span>
-                    {part.oem && (
-                      <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-bold">
-                        OEM
-                      </span>
-                    )}
-                  </div>
-                </div>
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Database className="h-6 w-6 text-blue-600" />
               </div>
-
-              <div className="mb-6">
-                <h3 className="font-bold text-gray-900 mb-2">Description</h3>
-                <p className="text-gray-700 leading-relaxed">{part.description}</p>
-              </div>
-
               <div>
-                <h3 className="font-bold text-gray-900 mb-3">Specifications</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {Object.entries(part.specifications).map(([key, value]) => (
-                    <div key={key} className="flex justify-between items-center py-2 border-b border-gray-100">
-                      <span className="text-gray-600 text-sm">{key}</span>
-                      <span className="font-mono text-sm text-gray-900">{value}</span>
-                    </div>
-                  ))}
-                </div>
+                <p className="text-sm font-medium text-gray-600">Total Stock</p>
+                <p className="text-2xl font-bold text-gray-900">{totalStock}</p>
               </div>
             </div>
+          </div>
 
-            {/* Stock Overview */}
-            <div className="space-y-4">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="font-bold text-gray-900 mb-3">Stock Overview</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Current Stock</span>
-                    <span className={`font-bold text-lg ${getStockLevelColor()}`}>
-                      {part.totalStock}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Min Level</span>
-                    <span className="text-gray-900">{part.minStockLevel}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Max Level</span>
-                    <span className="text-gray-900">{part.maxStockLevel}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Unit Price</span>
-                    <span className="text-gray-900 font-bold">${part.price.toFixed(2)}</span>
-                  </div>
-                </div>
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <CheckCircle className="h-6 w-6 text-green-600" />
               </div>
+              <div>
+                <p className="text-sm font-medium text-gray-600">Available</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {availableStock}
+                </p>
+              </div>
+            </div>
+          </div>
 
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <h4 className="font-bold text-yellow-800 mb-2">Stock Status</h4>
-                {part.totalStock <= part.minStockLevel ? (
-                  <p className="text-red-600 text-sm">⚠️ Low stock level reached</p>
-                ) : part.totalStock >= part.maxStockLevel ? (
-                  <p className="text-blue-600 text-sm">📦 Maximum stock level reached</p>
-                ) : (
-                  <p className="text-green-600 text-sm">✅ Stock levels normal</p>
-                )}
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-amber-100 rounded-lg">
+                <Clock className="h-6 w-6 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-600">Reserved</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {reservedStock}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <DollarSign className="h-6 w-6 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Value</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  ${totalValue.toFixed(2)}
+                </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Inventory Management */}
+        {/* Product Details Section with New Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
+          {/* Product Images - Left Side */}
+          <div className="lg:col-span-4">
+            <div className="bg-white border border-gray-200 rounded-xl p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">
+                Product Images
+              </h3>
+
+              <div className="space-y-4">
+                <div className="relative">
+                  <motion.div
+                    className="aspect-square bg-gray-50 rounded-lg border border-gray-200 overflow-hidden cursor-pointer"
+                    whileHover={{ scale: 1.02 }}
+                    onClick={() => setShowImageModal(true)}
+                  >
+                    <img
+                      src={
+                        product.images[selectedImage] ||
+                        "/api/placeholder/400/400"
+                      }
+                      alt={product.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-2 right-2">
+                      <div className="bg-black/50 text-white p-1.5 rounded-lg backdrop-blur-sm">
+                        <Eye className="h-4 w-4" />
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  {/* Image Thumbnails */}
+                  {product.images.length > 1 && (
+                    <div className="flex space-x-2 mt-3 overflow-x-auto">
+                      {product.images.map((image: string, index: number) => (
+                        <motion.button
+                          key={index}
+                          whileHover={{ scale: 1.05 }}
+                          onClick={() => setSelectedImage(index)}
+                          className={`flex-shrink-0 aspect-square w-16 rounded-lg border-2 overflow-hidden ${
+                            selectedImage === index
+                              ? "border-blue-500"
+                              : "border-gray-200 hover:border-blue-300"
+                          }`}
+                        >
+                          <img
+                            src={image}
+                            alt={`${product.name} ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </motion.button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Product Details Tabs - Right Side */}
+          <div className="lg:col-span-8">
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              {/* Tab Navigation */}
+              <div className="border-b border-gray-200 bg-gray-50">
+                <nav className="flex space-x-8 px-6">
+                  {[
+                    { id: "overview", label: "Overview", icon: Info },
+                    {
+                      id: "specifications",
+                      label: "Specifications",
+                      icon: Settings,
+                    },
+                    {
+                      id: "compatibility",
+                      label: "Compatibility",
+                      icon: Wrench,
+                    },
+                    { id: "analytics", label: "Analytics", icon: TrendingUp },
+                  ].map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      onClick={() => setActiveTab(id)}
+                      className={`flex items-center space-x-2 py-4 border-b-2 font-medium text-sm transition-colors ${
+                        activeTab === id
+                          ? "border-blue-500 text-blue-600"
+                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </nav>
+              </div>
+
+              {/* Tab Content */}
+              <div className="p-6 min-h-[400px]">
+                <AnimatePresence mode="wait">
+                  {activeTab === "overview" && (
+                    <motion.div
+                      key="overview"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      {/* Basic Product Info */}
+                      <div className="mt-6 pt-6 border-t border-gray-200">
+                        <span className="font-mono text-blue-600 text-sm font-bold bg-blue-100 px-3 py-1 rounded-lg border border-blue-200 mb-3 inline-block">
+                          {product.partNumber}
+                        </span>
+                        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                          {product.name}
+                        </h1>
+                        <div className="flex items-center space-x-2 mb-4">
+                          <Award className="h-4 w-4 text-blue-600" />
+                          <span className="text-sm font-medium text-gray-700">
+                            {product.brand}
+                          </span>
+                          <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-bold">
+                            {product.isActive ? "Active" : "Inactive"}
+                          </span>
+                        </div>
+
+                        {/* Pricing Info */}
+                        <div className="grid grid-cols-1 gap-3 mt-4">
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <TrendingUp className="h-4 w-4 text-blue-600" />
+                              <span className="text-sm font-medium text-blue-900">
+                                Selling Price
+                              </span>
+                            </div>
+                            <p className="text-xl font-bold text-blue-600">
+                              ${parseFloat(product.price).toFixed(2)}
+                            </p>
+                          </div>
+
+                          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <DollarSign className="h-4 w-4 text-green-600" />
+                              <span className="text-sm font-medium text-green-900">
+                                Cost Price
+                              </span>
+                            </div>
+                            <p className="text-xl font-bold text-green-600">
+                              ${parseFloat(product.costPrice).toFixed(2)}
+                            </p>
+                          </div>
+
+                          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <TrendingUp className="h-4 w-4 text-purple-600" />
+                              <span className="text-sm font-medium text-purple-900">
+                                Margin
+                              </span>
+                            </div>
+                            <p className="text-xl font-bold text-purple-600">
+                              {(
+                                ((parseFloat(product.price) -
+                                  parseFloat(product.costPrice)) /
+                                  parseFloat(product.price)) *
+                                100
+                              ).toFixed(1)}
+                              %
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <h3 className="text-xl font-bold text-gray-900 mb-4">
+                        Product Overview
+                      </h3>
+                      <div className="prose prose-gray max-w-none">
+                        <p className="text-gray-700 leading-relaxed text-lg mb-6">
+                          {product.description}
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div className="flex items-center space-x-2 mb-3">
+                              <Shield className="h-5 w-5 text-blue-600" />
+                              <h4 className="font-bold text-blue-900">
+                                Admin Notes
+                              </h4>
+                            </div>
+                            <p className="text-blue-800 text-sm">
+                              This product is actively managed in the inventory
+                              system. Monitor stock levels and supplier
+                              relationships regularly.
+                            </p>
+                          </div>
+
+                          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                            <div className="flex items-center space-x-2 mb-3">
+                              <TrendingUp className="h-5 w-5 text-green-600" />
+                              <h4 className="font-bold text-green-900">
+                                Performance
+                              </h4>
+                            </div>
+                            <p className="text-green-800 text-sm">
+                              Strong demand with consistent sales. Consider
+                              increasing stock levels for better availability.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Key Information */}
+                        <div className="grid grid-cols-2 gap-6 mt-8">
+                          <div className="space-y-4">
+                            <div className="flex items-center space-x-3">
+                              <Package className="h-5 w-5 text-gray-500" />
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">
+                                  Category
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                  {product.category} → {product.subcategory}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                              <Truck className="h-5 w-5 text-gray-500" />
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">
+                                  Weight
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                  {product.weight} kg
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div className="flex items-center space-x-3">
+                              <Users className="h-5 w-5 text-gray-500" />
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">
+                                  Created By
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                  {product.createdBy.firstName}{" "}
+                                  {product.createdBy.lastName}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                              <Calendar className="h-5 w-5 text-gray-500" />
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">
+                                  Created
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                  {formatDate(product.createdAt)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {activeTab === "specifications" && (
+                    <motion.div
+                      key="specifications"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <h3 className="text-xl font-bold text-gray-900 mb-4">
+                        Technical Specifications
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                        {Object.entries(product.specifications).map(
+                          ([key, value]) => (
+                            <div
+                              key={key}
+                              className="flex justify-between items-center py-3 border-b border-gray-100"
+                            >
+                              <span className="font-medium text-gray-700">
+                                {key}
+                              </span>
+                              <span className="text-gray-900 font-mono">
+                                value
+                              </span>
+                            </div>
+                          )
+                        )}
+                      </div>
+
+                      <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <div className="flex items-start space-x-3">
+                          <Info className="h-5 w-5 text-yellow-600 mt-0.5" />
+                          <div>
+                            <h4 className="font-bold text-yellow-900 mb-1">
+                              Important Note
+                            </h4>
+                            <p className="text-yellow-800 text-sm">
+                              Always verify compatibility with your specific
+                              machine model and serial number before ordering.
+                              Contact our technical support team if you need
+                              assistance.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {activeTab === "compatibility" && (
+                    <motion.div
+                      key="compatibility"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <h3 className="text-xl font-bold text-gray-900 mb-4">
+                        Compatible Models
+                      </h3>
+                      <p className="text-gray-600 mb-6">
+                        This {product.name.toLowerCase()} is compatible with the
+                        following CAT engine models:
+                      </p>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-8">
+                        {product.compatibleModels.map((model: string) => (
+                          <div
+                            key={model}
+                            className="bg-blue-100 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-center font-bold hover:bg-blue-200 transition-colors"
+                          >
+                            {model}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
+                        <h4 className="font-bold text-gray-900 mb-4 flex items-center">
+                          <Wrench className="h-5 w-5 mr-2 text-gray-600" />
+                          Installation Guidelines
+                        </h4>
+                        <div className="space-y-3 text-sm text-gray-700">
+                          <div className="flex items-start space-x-3">
+                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5" />
+                            <span>
+                              Professional installation recommended for optimal
+                              performance
+                            </span>
+                          </div>
+                          <div className="flex items-start space-x-3">
+                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5" />
+                            <span>
+                              Ensure fuel system is properly cleaned before
+                              installation
+                            </span>
+                          </div>
+                          <div className="flex items-start space-x-3">
+                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5" />
+                            <span>
+                              Use genuine CAT fuel for best filtration results
+                            </span>
+                          </div>
+                          <div className="flex items-start space-x-3">
+                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5" />
+                            <span>
+                              Follow torque specifications in service manual
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {activeTab === "analytics" && (
+                    <motion.div
+                      key="analytics"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <h3 className="text-xl font-bold text-gray-900 mb-4">
+                        Product Analytics
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-6">
+                          <div className="flex items-center space-x-3 mb-4">
+                            <div className="p-2 bg-blue-200 rounded-lg">
+                              <TrendingUp className="h-6 w-6 text-blue-600" />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-blue-900">
+                                Avg. Cost
+                              </h4>
+                              <p className="text-2xl font-bold text-blue-600">
+                                ${averageCost.toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-blue-800 text-sm">
+                            Average purchase price across all items
+                          </p>
+                        </div>
+
+                        <div className="bg-gradient-to-r from-green-50 to-green-100 border border-green-200 rounded-lg p-6">
+                          <div className="flex items-center space-x-3 mb-4">
+                            <div className="p-2 bg-green-200 rounded-lg">
+                              <DollarSign className="h-6 w-6 text-green-600" />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-green-900">
+                                Profit Margin
+                              </h4>
+                              <p className="text-2xl font-bold text-green-600">
+                                {(
+                                  ((parseFloat(product.price) - averageCost) /
+                                    parseFloat(product.price)) *
+                                  100
+                                ).toFixed(1)}
+                                %
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-green-800 text-sm">
+                            Based on average cost vs selling price
+                          </p>
+                        </div>
+
+                        <div className="bg-gradient-to-r from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-6">
+                          <div className="flex items-center space-x-3 mb-4">
+                            <div className="p-2 bg-purple-200 rounded-lg">
+                              <Package className="h-6 w-6 text-purple-600" />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-purple-900">
+                                Turnover Rate
+                              </h4>
+                              <p className="text-2xl font-bold text-purple-600">
+                                85%
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-purple-800 text-sm">
+                            Stock turnover in the last 90 days
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                        <div className="bg-white border border-gray-200 rounded-lg p-6">
+                          <h4 className="font-bold text-gray-900 mb-4">
+                            Sales Trend
+                          </h4>
+                          <div className="h-32 bg-gradient-to-r from-blue-100 to-blue-50 rounded-lg flex items-center justify-center">
+                            <span className="text-gray-600">
+                              Chart placeholder
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="bg-white border border-gray-200 rounded-lg p-6">
+                          <h4 className="font-bold text-gray-900 mb-4">
+                            Stock Movement
+                          </h4>
+                          <div className="h-32 bg-gradient-to-r from-green-100 to-green-50 rounded-lg flex items-center justify-center">
+                            <span className="text-gray-600">
+                              Chart placeholder
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Enhanced Inventory Items Section */}
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           {/* Header */}
-          <div className="border-b border-gray-200 p-6">
+          <div className="px-6 py-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Inventory Items</h2>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center space-x-3">
+                  <Package className="h-7 w-7 text-blue-600" />
+                  <span>Inventory Items</span>
+                </h2>
+                <p className="text-gray-600 mt-1">
+                  {filteredItems.length} of {totalStock} items • Total value $
+                  {totalValue.toFixed(2)}
+                </p>
+              </div>
+
               <div className="flex items-center space-x-3">
                 <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="flex items-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg transition-colors"
-                >
-                  <Download className="h-4 w-4" />
-                  <span>Export</span>
-                </motion.button>
-                
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="flex items-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg transition-colors"
-                >
-                  <Upload className="h-4 w-4" />
-                  <span>Import</span>
-                </motion.button>
-
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowAddItemModal(true)}
-                  className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg font-medium transition-all duration-300 shadow-lg hover:shadow-xl"
                 >
                   <Plus className="h-4 w-4" />
-                  <span>Add Item</span>
+                  <span>Add New Item</span>
                 </motion.button>
               </div>
             </div>
 
             {/* Search and Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <div className="md:col-span-2 relative">
-                <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search by barcode, shelf location, or notes..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
+            <div className="flex flex-col sm:flex-row items-center justify-between space-y-3 sm:space-y-0 sm:space-x-4">
+              <div className="flex items-center space-x-3 w-full sm:w-auto">
+                {/* Search */}
+                <div className="relative flex-1 sm:flex-initial">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by barcode, location, or supplier..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-64 transition-all duration-300"
+                  />
+                </div>
+
+                {/* Status Filter */}
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                >
+                  <option value="all">All Status</option>
+                  <option value="available">Available</option>
+                  <option value="reserved">Reserved</option>
+                  <option value="sold">Sold</option>
+                  <option value="damaged">Damaged</option>
+                </select>
               </div>
 
-              <select
-                value={locationFilter}
-                onChange={(e) => setLocationFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Locations</option>
-                {locations.map(location => (
-                  <option key={location.id} value={location.name}>{location.name}</option>
-                ))}
-              </select>
-
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Status</option>
-                <option value="available">Available</option>
-                <option value="reserved">Reserved</option>
-                <option value="damaged">Damaged</option>
-                <option value="in-transit">In Transit</option>
-              </select>
-
-              <select
-                value={conditionFilter}
-                onChange={(e) => setConditionFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Conditions</option>
-                <option value="new">New</option>
-                <option value="used">Used</option>
-                <option value="refurbished">Refurbished</option>
-              </select>
+              {/* View Mode Toggle */}
+              <div className="flex items-center space-x-2">
+                <div className="bg-gray-100 rounded-lg p-1 flex items-center space-x-1">
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={`p-2 rounded-md transition-all duration-300 ${
+                      viewMode === "grid"
+                        ? "bg-white shadow-sm text-blue-600"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    <Grid3X3 className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode("list")}
+                    className={`p-2 rounded-md transition-all duration-300 ${
+                      viewMode === "list"
+                        ? "bg-white shadow-sm text-blue-600"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    <List className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Table */}
+          {/* Bulk Actions */}
+          <AnimatePresence>
+            {selectedItems.length > 0 && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-blue-900">
+                    {selectedItems.length} item
+                    {selectedItems.length > 1 ? "s" : ""} selected
+                  </span>
+                  <div className="flex items-center space-x-2">
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="flex items-center space-x-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <Archive className="h-4 w-4" />
+                      <span>Archive</span>
+                    </motion.button>
+
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="flex items-center space-x-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>Delete</span>
+                    </motion.button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Items Display */}
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th className="w-12 px-6 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={
+                        selectedItems.length === filteredItems.length &&
+                        filteredItems.length > 0
+                      }
+                      onChange={handleSelectAll}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Barcode
                   </th>
@@ -517,386 +1097,212 @@ const AdminPartDetail: React.FC = () => {
                     Location
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Shelf Location
+                    Shelving
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Added On
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Supplier
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Condition
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Added By
+                    Cost
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredItems.map((item) => {
-                  const statusInfo = getStatusInfo(item.status);
-                  const StatusIcon = statusInfo.icon;
-                  
-                  return (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <Barcode className="h-4 w-4 text-gray-400" />
-                          <span className="font-mono text-sm text-gray-900">{item.barcode}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <Building2 className="h-4 w-4 text-gray-400" />
-                          <span className="text-sm text-gray-900">{item.location}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <MapPin className="h-4 w-4 text-gray-400" />
-                          <span className="font-mono text-sm text-gray-900">{item.shelveLocation}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <Calendar className="h-4 w-4 text-gray-400" />
-                          <span className="text-sm text-gray-900">{item.addedOn}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className={`inline-flex items-center space-x-2 px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
-                          <StatusIcon className="h-3 w-3" />
-                          <span>{statusInfo.label}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getConditionColor(item.condition)}`}>
-                          {item.condition.charAt(0).toUpperCase() + item.condition.slice(1)}
+                {filteredItems.map((item) => (
+                  <motion.tr
+                    key={item.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="hover:bg-gray-50 transition-colors"
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedItems.includes(item.id)}
+                        onChange={() => handleSelectItem(item.id)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center space-x-2">
+                        <Barcode className="h-4 w-4 text-gray-400" />
+                        <span className="font-mono text-sm font-medium text-gray-900">
+                          {item.barCode}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <User className="h-4 w-4 text-gray-400" />
-                          <span className="text-sm text-gray-900">{item.addedBy}</span>
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center space-x-2">
+                        <Building2 className="h-4 w-4 text-gray-400" />
+                        <span className="text-sm text-gray-900">
+                          {item.location}
+                        </span>
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="h-4 w-4 text-gray-400" />
+                        <span className="text-sm font-medium text-gray-900">
+                          {item.shelvingLocation}
+                        </span>
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="h-4 w-4 text-gray-400" />
+                        <span className="text-sm text-gray-900">
+                          {formatDate(item.addedOn)}
+                        </span>
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {item.supplier.name}
                         </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center space-x-2">
+                        <div className="text-sm text-gray-500">
+                          {item.supplier.contactPerson}
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getStatusBadge(item.status)}
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getConditionBadge(item.condition)}
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="text-sm font-medium text-gray-900">
+                        ${parseFloat(item.purchasePrice).toFixed(2)}
+                      </span>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end space-x-2">
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Edit Item"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </motion.button>
+
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                          title="View Details"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </motion.button>
+
+                        <div className="relative group">
                           <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={() => handleEditItem(item)}
-                            className="text-blue-600 hover:text-blue-900 p-1"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
                           >
-                            <Edit2 className="h-4 w-4" />
-                          </motion.button>
-                          
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={() => handleDeleteItem(item.id)}
-                            className="text-red-600 hover:text-red-900 p-1"
-                          >
-                            <Trash2 className="h-4 w-4" />
+                            <MoreHorizontal className="h-4 w-4" />
                           </motion.button>
 
-                          {/* Quick status change */}
-                          <select
-                            value={item.status}
-                            onChange={(e) => updateItemStatus(item.id, e.target.value as InventoryItem['status'])}
-                            className="text-xs border border-gray-200 rounded px-2 py-1"
-                          >
-                            <option value="available">Available</option>
-                            <option value="reserved">Reserved</option>
-                            <option value="damaged">Damaged</option>
-                            <option value="in-transit">In Transit</option>
-                          </select>
+                          {/* Dropdown Menu */}
+                          <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
+                            <div className="py-1">
+                              <button className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                <RefreshCw className="h-4 w-4" />
+                                <span>Update Status</span>
+                              </button>
+                              <button className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                <Archive className="h-4 w-4" />
+                                <span>Archive Item</span>
+                              </button>
+                              <div className="border-t border-gray-100 my-1"></div>
+                              <button className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50">
+                                <Trash2 className="h-4 w-4" />
+                                <span>Delete Item</span>
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                      </div>
+                    </td>
+                  </motion.tr>
+                ))}
               </tbody>
             </table>
           </div>
-
-          {filteredItems.length === 0 && (
-            <div className="text-center py-12">
-              <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No inventory items found</h3>
-              <p className="text-gray-600 mb-4">Try adjusting your search criteria or add a new item.</p>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setShowAddItemModal(true)}
-                className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Add First Item</span>
-              </motion.button>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Add Item Modal */}
+      {/* Image Modal */}
       <AnimatePresence>
-        {showAddItemModal && (
+        {showImageModal && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+            onClick={() => setShowImageModal(false)}
           >
             <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
+              initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-xl p-6 w-full max-w-md"
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative max-w-4xl max-h-full"
+              onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-gray-900">Add New Inventory Item</h3>
-                <button
-                  onClick={() => setShowAddItemModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+              <button
+                onClick={() => setShowImageModal(false)}
+                className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors z-10"
+              >
+                <X className="h-6 w-6" />
+              </button>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Barcode *
-                  </label>
-                  <input
-                    type="text"
-                    value={newItem.barcode}
-                    onChange={(e) => setNewItem(prev => ({ ...prev, barcode: e.target.value }))}
-                    placeholder="e.g., HP001-007-MW"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
+              <img
+                src={
+                  product.images[selectedImage] || "/api/placeholder/600/450"
+                }
+                alt={product.name}
+                className="w-full h-full object-contain rounded-lg"
+              />
+
+              {/* Image Navigation */}
+              {product.images.length > 1 && (
+                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
+                  {product.images.map((_: string, index: number) => (
+                    <button
+                      key={index}
+                      onClick={() => setSelectedImage(index)}
+                      className={`w-3 h-3 rounded-full transition-colors ${
+                        selectedImage === index
+                          ? "bg-white"
+                          : "bg-white/50 hover:bg-white/75"
+                      }`}
+                    />
+                  ))}
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Location *
-                  </label>
-                  <select
-                    value={newItem.location}
-                    onChange={(e) => setNewItem(prev => ({ ...prev, location: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select a location</option>
-                    {locations.map(location => (
-                      <option key={location.id} value={location.name}>{location.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Shelf Location *
-                  </label>
-                  <input
-                    type="text"
-                    value={newItem.shelveLocation}
-                    onChange={(e) => setNewItem(prev => ({ ...prev, shelveLocation: e.target.value }))}
-                    placeholder="e.g., A-12-05"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Condition
-                  </label>
-                  <select
-                    value={newItem.condition}
-                    onChange={(e) => setNewItem(prev => ({ ...prev, condition: e.target.value as any }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="new">New</option>
-                    <option value="used">Used</option>
-                    <option value="refurbished">Refurbished</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes (Optional)
-                  </label>
-                  <textarea
-                    value={newItem.notes}
-                    onChange={(e) => setNewItem(prev => ({ ...prev, notes: e.target.value }))}
-                    placeholder="Additional notes about this item..."
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex space-x-3 mt-6">
-                <button
-                  onClick={() => setShowAddItemModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={handleAddItem}
-                  disabled={!newItem.barcode || !newItem.location || !newItem.shelveLocation}
-                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-                >
-                  Add Item
-                </motion.button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Edit Item Modal */}
-      <AnimatePresence>
-        {showEditModal && editingItem && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-xl p-6 w-full max-w-md"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-gray-900">Edit Inventory Item</h3>
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Barcode
-                  </label>
-                  <input
-                    type="text"
-                    value={editingItem.barcode}
-                    onChange={(e) => setEditingItem(prev => prev ? ({ ...prev, barcode: e.target.value }) : null)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Location
-                  </label>
-                  <select
-                    value={editingItem.location}
-                    onChange={(e) => setEditingItem(prev => prev ? ({ ...prev, location: e.target.value }) : null)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    {locations.map(location => (
-                      <option key={location.id} value={location.name}>{location.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Shelf Location
-                  </label>
-                  <input
-                    type="text"
-                    value={editingItem.shelveLocation}
-                    onChange={(e) => setEditingItem(prev => prev ? ({ ...prev, shelveLocation: e.target.value }) : null)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Status
-                  </label>
-                  <select
-                    value={editingItem.status}
-                    onChange={(e) => setEditingItem(prev => prev ? ({ ...prev, status: e.target.value as InventoryItem['status'] }) : null)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="available">Available</option>
-                    <option value="reserved">Reserved</option>
-                    <option value="damaged">Damaged</option>
-                    <option value="in-transit">In Transit</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Condition
-                  </label>
-                  <select
-                    value={editingItem.condition}
-                    onChange={(e) => setEditingItem(prev => prev ? ({ ...prev, condition: e.target.value as InventoryItem['condition'] }) : null)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="new">New</option>
-                    <option value="used">Used</option>
-                    <option value="refurbished">Refurbished</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes
-                  </label>
-                  <textarea
-                    value={editingItem.notes || ""}
-                    onChange={(e) => setEditingItem(prev => prev ? ({ ...prev, notes: e.target.value }) : null)}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex space-x-3 mt-6">
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    if (editingItem) {
-                      setInventoryItems(prev => 
-                        prev.map(item => 
-                          item.id === editingItem.id ? editingItem : item
-                        )
-                      );
-                      setShowEditModal(false);
-                      setEditingItem(null);
-                    }
-                  }}
-                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                >
-                  Save Changes
-                </motion.button>
-              </div>
+              )}
             </motion.div>
           </motion.div>
         )}
@@ -905,4 +1311,4 @@ const AdminPartDetail: React.FC = () => {
   );
 };
 
-export default AdminPartDetail;
+export default AdminProductDetails;
