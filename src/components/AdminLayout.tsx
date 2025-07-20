@@ -1,7 +1,7 @@
 // components/AdminLayout.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -26,7 +26,13 @@ interface AdminLayoutProps {
 
 const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
+
+  // Fix hydration by ensuring client-only rendering for dynamic content
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const sidebarItems: SidebarItem[] = [
     {
@@ -158,6 +164,86 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       </nav>
     </div>
   );
+
+  // Show loading state until mounted to prevent hydration mismatch
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex">
+        <div className="hidden lg:block w-64 flex-shrink-0">
+          <Sidebar />
+        </div>
+        <div className="flex-1 flex flex-col min-h-screen">
+          <header className="bg-white border-b border-gray-200 px-4 py-4 lg:px-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <button className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                  <Menu className="h-5 w-5 text-gray-600" />
+                </button>
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900">
+                    {pageInfo.title}
+                  </h1>
+                  <p className="text-sm text-gray-600">{pageInfo.description}</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-4">
+                <button className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                  <Bell className="h-5 w-5 text-gray-600" />
+                  <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                    3
+                  </span>
+                </button>
+                <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                  <RefreshCw className="h-5 w-5 text-gray-600" />
+                </button>
+                <div className="flex items-center space-x-3">
+                  <div className="hidden sm:block text-right">
+                    <p className="text-sm font-medium text-gray-900">
+                      Admin User
+                    </p>
+                    <p className="text-xs text-gray-600">System Administrator</p>
+                  </div>
+                  <div className="h-8 w-8 bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center">
+                    <span className="text-white font-bold text-sm">AU</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </header>
+          <main className="flex-1 p-4 lg:p-6 overflow-auto">
+            {children}
+          </main>
+          <footer className="bg-white border-t border-gray-200 px-4 py-3 lg:px-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+              <div className="flex items-center space-x-4 text-sm text-gray-600">
+                <span>© 2024 CAT Parts Admin</span>
+                <span>•</span>
+                <span>Version 2.1.0</span>
+                <span>•</span>
+                <span className="flex items-center space-x-1">
+                  <span className="h-2 w-2 bg-green-500 rounded-full"></span>
+                  <span>System Operational</span>
+                </span>
+              </div>
+              <div className="flex items-center space-x-4 text-sm text-gray-600">
+                <button className="hover:text-yellow-600 transition-colors">
+                  Support
+                </button>
+                <span>•</span>
+                <button className="hover:text-yellow-600 transition-colors">
+                  Documentation
+                </button>
+                <span>•</span>
+                <button className="hover:text-yellow-600 transition-colors">
+                  API Status
+                </button>
+              </div>
+            </div>
+          </footer>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">

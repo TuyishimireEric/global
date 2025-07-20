@@ -100,7 +100,6 @@ export interface AdminFilters {
   searchText: string;
   category: string;
   brand: string;
-  isActive: string; // 'all' | 'true' | 'false'
   availability: string;
   priceRange: {
     min: number;

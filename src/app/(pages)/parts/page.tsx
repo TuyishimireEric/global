@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState,  useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -22,7 +22,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { TransformedPart, FrontendFilters } from "@/types/parts";
-import useClientParts, { usePartsMetadata } from "@/hooks/parts/useClientParts";
+import useClientParts, { usePartsMetadata } from "@/hooks/parts/useParts";
 
 interface QuoteItem {
   partId: string;

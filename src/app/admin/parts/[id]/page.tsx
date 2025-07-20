@@ -1,641 +1,908 @@
 "use client";
 
-// Types and Interfaces
-export interface PartItem {
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ArrowLeft,
+  Plus,
+  Search,
+  Filter,
+  Edit2,
+  Trash2,
+  Package,
+  MapPin,
+  Calendar,
+  Barcode,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  X,
+  Save,
+  Settings,
+  Eye,
+  Download,
+  Upload,
+  RefreshCw,
+  Archive,
+  Building2,
+  User
+} from "lucide-react";
+
+// Types
+interface Part {
   id: string;
-  partId: string;
+  name: string;
+  sku: string;
+  category: string;
+  manufacturer: string;
+  price: number;
+  description: string;
+  specifications: Record<string, string>;
+  partNumber: string;
+  oem: boolean;
+  totalStock: number;
+  minStockLevel: number;
+  maxStockLevel: number;
+}
+
+interface InventoryItem {
+  id: string;
   barcode: string;
   location: string;
-  status: "available" | "reserved" | "damaged" | "maintenance";
-  dateAdded: string;
-  lastUpdated: string;
+  addedOn: string;
+  status: "available" | "reserved" | "damaged" | "in-transit";
+  shelveLocation: string;
+  addedBy: string;
+  condition: "new" | "used" | "refurbished";
   notes?: string;
 }
 
-export interface Part {
+interface Location {
   id: string;
-  sku: string;
   name: string;
-  category: string;
-  manufacturer: string;
-  series: string;
-  price: number;
-  listPrice?: number;
-  image: string;
-  availability: "in-stock" | "low-stock" | "out-stock" | "on-order";
-  stockQty: number;
-  leadTime: string;
-  minOrder: number;
-  weight: number;
-  dimensions: string;
-  compatibility: string[];
-  supersedes: string[];
-  description: string;
-  discount?: number;
-  rating?: number;
-  reviews?: number;
-  featured?: boolean;
+  address: string;
 }
 
-// Mock data for items
-const mockItems: PartItem[] = [
-  {
-    id: "item-1",
-    partId: "1",
-    barcode: "CAT001001",
-    location: "A1-B2-C3",
-    status: "available",
-    dateAdded: "2024-01-15",
-    lastUpdated: "2024-01-15",
-    notes: "New arrival",
+// Sample data
+const samplePart: Part = {
+  id: "1",
+  name: "Hydraulic Pump Assembly",
+  sku: "CAT-320-HP-001",
+  category: "Hydraulic System",
+  manufacturer: "Caterpillar",
+  price: 2450.00,
+  description: "High-performance hydraulic pump assembly designed for CAT 320 series excavators. Engineered to deliver optimal flow rates and pressure for maximum excavator performance. Built with premium materials and precision manufacturing for long-lasting durability.",
+  specifications: {
+    "Flow Rate": "165 L/min",
+    "Operating Pressure": "35 MPa",
+    "Port Size": "3/4 inch",
+    "Material": "Cast Iron with Steel Components",
+    "Temperature Range": "-20°C to +80°C",
+    "Seal Type": "Nitrile Rubber",
+    "Mounting": "SAE Standard",
+    "Filtration": "25 micron"
   },
-  {
-    id: "item-2",
-    partId: "1",
-    barcode: "CAT001002",
-    location: "A1-B2-C4",
-    status: "available",
-    dateAdded: "2024-01-15",
-    lastUpdated: "2024-01-15",
-  },
-  {
-    id: "item-3",
-    partId: "1",
-    barcode: "CAT001003",
-    location: "A1-B3-C1",
-    status: "reserved",
-    dateAdded: "2024-01-10",
-    lastUpdated: "2024-01-18",
-    notes: "Reserved for Order #12345",
-  },
-  {
-    id: "item-4",
-    partId: "1",
-    barcode: "CAT001004",
-    location: "A1-B3-C2",
-    status: "available",
-    dateAdded: "2024-01-08",
-    lastUpdated: "2024-01-08",
-  },
-  {
-    id: "item-5",
-    partId: "1",
-    barcode: "CAT001005",
-    location: "A2-B1-C1",
-    status: "damaged",
-    dateAdded: "2024-01-05",
-    lastUpdated: "2024-01-16",
-    notes: "Minor damage on housing",
-  },
+  partNumber: "320-3064",
+  oem: true,
+  totalStock: 47,
+  minStockLevel: 10,
+  maxStockLevel: 100
+};
+
+const sampleLocations: Location[] = [
+  { id: "1", name: "Main Warehouse", address: "123 Industrial Ave, Phoenix, AZ" },
+  { id: "2", name: "East Coast DC", address: "456 Logistics Blvd, Atlanta, GA" },
+  { id: "3", name: "West Coast DC", address: "789 Supply Chain Dr, Los Angeles, CA" },
+  { id: "4", name: "Service Center", address: "321 Repair St, Houston, TX" }
 ];
 
-import React, { useState } from "react";
-import Link from "next/link";
-import { useParams } from "next/navigation";
-import {
-  ArrowLeft,
-  Edit,
-  Trash2,
-  Package,
-  DollarSign,
-  Truck,
-  AlertTriangle,
-  Plus,
-  QrCode,
-  MapPin,
-  Search,
-  Save,
-  X,
-} from "lucide-react";
-import {
-  PageHeader,
-  ActionButton,
-  StatusBadge,
-  Card,
-} from "../../../../components/ui";
-import { getPartById } from "@/utils/constants";
-
-
-const PartDetailPage: React.FC = () => {
-  const params = useParams();
-  const partId = params.id as string;
-  const [activeTab, setActiveTab] = useState<"overview" | "items">("overview");
-  const [editingItem, setEditingItem] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-
-  const part = getPartById(partId);
-  const items = mockItems.filter((item) => item.partId === partId);
-
-  if (!part) {
-    return (
-      <div className="text-center py-12">
-        <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-xl font-bold text-gray-900 mb-2">Part Not Found</h3>
-        <p className="text-gray-600 mb-4">
-          The part you&apos;re looking for doesn&apos;t exist.
-        </p>
-        <Link href="/admin/parts">
-          <ActionButton
-            icon={ArrowLeft}
-            label="Back to Parts"
-            variant="outline"
-          />
-        </Link>
-      </div>
-    );
+const sampleInventoryItems: InventoryItem[] = [
+  {
+    id: "1",
+    barcode: "HP001-001-MW",
+    location: "Main Warehouse",
+    addedOn: "2024-07-15",
+    status: "available",
+    shelveLocation: "A-12-03",
+    addedBy: "John Smith",
+    condition: "new"
+  },
+  {
+    id: "2",
+    barcode: "HP001-002-MW",
+    location: "Main Warehouse",
+    addedOn: "2024-07-15",
+    status: "available",
+    shelveLocation: "A-12-04",
+    addedBy: "John Smith",
+    condition: "new"
+  },
+  {
+    id: "3",
+    barcode: "HP001-003-EC",
+    location: "East Coast DC",
+    addedOn: "2024-07-12",
+    status: "reserved",
+    shelveLocation: "B-05-12",
+    addedBy: "Sarah Johnson",
+    condition: "new",
+    notes: "Reserved for order #12345"
+  },
+  {
+    id: "4",
+    barcode: "HP001-004-WC",
+    location: "West Coast DC",
+    addedOn: "2024-07-10",
+    status: "available",
+    shelveLocation: "C-08-07",
+    addedBy: "Mike Wilson",
+    condition: "refurbished"
+  },
+  {
+    id: "5",
+    barcode: "HP001-005-MW",
+    location: "Main Warehouse",
+    addedOn: "2024-07-08",
+    status: "damaged",
+    shelveLocation: "D-01-15",
+    addedBy: "John Smith",
+    condition: "used",
+    notes: "Hydraulic leak detected"
+  },
+  {
+    id: "6",
+    barcode: "HP001-006-SC",
+    location: "Service Center",
+    addedOn: "2024-07-05",
+    status: "in-transit",
+    shelveLocation: "TRANSIT",
+    addedBy: "Lisa Chen",
+    condition: "new",
+    notes: "Shipping to customer location"
   }
+];
 
-  const getStockStatus = (stock: number) => {
-    if (stock === 0) return { color: "text-red-600", label: "Out of Stock" };
-    if (stock <= 5) return { color: "text-red-600", label: "Critical" };
-    if (stock <= 10) return { color: "text-yellow-600", label: "Low Stock" };
-    return { color: "text-green-600", label: "In Stock" };
-  };
+const AdminPartDetail: React.FC = () => {
+  const [part] = useState<Part>(samplePart);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(sampleInventoryItems);
+  const [locations] = useState<Location[]>(sampleLocations);
+  
+  // Filters and search
+  const [searchTerm, setSearchTerm] = useState("");
+  const [locationFilter, setLocationFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [conditionFilter, setConditionFilter] = useState("all");
+  
+  // Modal states
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  
+  // Form state for new item
+  const [newItem, setNewItem] = useState({
+    barcode: "",
+    location: "",
+    shelveLocation: "",
+    condition: "new" as const,
+    notes: ""
+  });
 
-  const getItemStatusColor = (status: string) => {
+  // Filter inventory items
+  const filteredItems = inventoryItems.filter(item => {
+    const matchesSearch = item.barcode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         item.shelveLocation.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         item.notes?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesLocation = locationFilter === "all" || item.location === locationFilter;
+    const matchesStatus = statusFilter === "all" || item.status === statusFilter;
+    const matchesCondition = conditionFilter === "all" || item.condition === conditionFilter;
+    
+    return matchesSearch && matchesLocation && matchesStatus && matchesCondition;
+  });
+
+  // Get status info
+  const getStatusInfo = (status: string) => {
     switch (status) {
       case "available":
-        return "bg-green-100 text-green-800";
+        return { icon: CheckCircle, color: "text-green-600 bg-green-50", label: "Available" };
       case "reserved":
-        return "bg-blue-100 text-blue-800";
+        return { icon: Clock, color: "text-blue-600 bg-blue-50", label: "Reserved" };
       case "damaged":
-        return "bg-red-100 text-red-800";
-      case "maintenance":
-        return "bg-yellow-100 text-yellow-800";
+        return { icon: AlertCircle, color: "text-red-600 bg-red-50", label: "Damaged" };
+      case "in-transit":
+        return { icon: Package, color: "text-purple-600 bg-purple-50", label: "In Transit" };
       default:
-        return "bg-gray-100 text-gray-800";
+        return { icon: AlertCircle, color: "text-gray-600 bg-gray-50", label: status };
     }
   };
 
-  const stockStatus = getStockStatus(part.stockQty);
+  // Get condition badge color
+  const getConditionColor = (condition: string) => {
+    switch (condition) {
+      case "new":
+        return "bg-green-100 text-green-700";
+      case "used":
+        return "bg-yellow-100 text-yellow-700";
+      case "refurbished":
+        return "bg-blue-100 text-blue-700";
+      default:
+        return "bg-gray-100 text-gray-700";
+    }
+  };
 
-  const filteredItems = items.filter((item) => {
-    const matchesSearch =
-      item.barcode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.location.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus =
-      statusFilter === "all" || item.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  // Handle add new item
+  const handleAddItem = () => {
+    if (!newItem.barcode || !newItem.location || !newItem.shelveLocation) {
+      return;
+    }
 
-  const ItemEditRow = ({ item }: { item: PartItem }) => (
-    <tr className="bg-blue-50">
-      <td colSpan={6} className="px-6 py-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Barcode
-            </label>
-            <input
-              type="text"
-              defaultValue={item.barcode}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Location
-            </label>
-            <input
-              type="text"
-              defaultValue={item.location}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Status
-            </label>
-            <select
-              defaultValue={item.status}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="available">Available</option>
-              <option value="reserved">Reserved</option>
-              <option value="damaged">Damaged</option>
-              <option value="maintenance">Maintenance</option>
-            </select>
-          </div>
-          <div className="md:col-span-3">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notes
-            </label>
-            <textarea
-              defaultValue={item.notes || ""}
-              rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-          <div className="md:col-span-3 flex space-x-2">
-            <ActionButton
-              label="Save"
-              icon={Save}
-              variant="primary"
-              onClick={() => setEditingItem(null)}
-            />
-            <ActionButton
-              label="Cancel"
-              icon={X}
-              variant="outline"
-              onClick={() => setEditingItem(null)}
-            />
-          </div>
-        </div>
-      </td>
-    </tr>
-  );
+    const item: InventoryItem = {
+      id: Date.now().toString(),
+      barcode: newItem.barcode,
+      location: newItem.location,
+      addedOn: new Date().toISOString().split('T')[0],
+      status: "available",
+      shelveLocation: newItem.shelveLocation,
+      addedBy: "Current User", // This would come from auth context
+      condition: newItem.condition,
+      notes: newItem.notes || undefined
+    };
 
-  const renderOverviewTab = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Main Information */}
-      <div className="lg:col-span-2 space-y-6">
-        <Card>
-          <h3 className="text-lg font-bold text-gray-900 mb-4">Part Details</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Part Name
-              </label>
-              <p className="text-lg font-semibold text-gray-900">{part.name}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                SKU
-              </label>
-              <p className="text-gray-900">{part.sku}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Category
-              </label>
-              <p className="text-gray-900">{part.category}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Manufacturer
-              </label>
-              <p className="text-gray-900">{part.manufacturer}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Series
-              </label>
-              <p className="text-gray-900">{part.series}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Status
-              </label>
-              <StatusBadge status={part.availability} />
-            </div>
-          </div>
-        </Card>
+    setInventoryItems(prev => [item, ...prev]);
+    setNewItem({
+      barcode: "",
+      location: "",
+      shelveLocation: "",
+      condition: "new",
+      notes: ""
+    });
+    setShowAddItemModal(false);
+  };
 
-        <Card>
-          <h3 className="text-lg font-bold text-gray-900 mb-4">
-            Inventory & Pricing
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <div className="flex items-center space-x-2 mb-2">
-                <Package className="h-5 w-5 text-gray-600" />
-                <span className="text-sm font-medium text-gray-700">
-                  Current Stock
-                </span>
-              </div>
-              <p className={`text-2xl font-bold ${stockStatus.color}`}>
-                {part.stockQty}
-              </p>
-              <p className={`text-sm ${stockStatus.color}`}>
-                {stockStatus.label}
-              </p>
-            </div>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <div className="flex items-center space-x-2 mb-2">
-                <DollarSign className="h-5 w-5 text-gray-600" />
-                <span className="text-sm font-medium text-gray-700">
-                  Unit Price
-                </span>
-              </div>
-              <p className="text-2xl font-bold text-gray-900">
-                ${part.price.toFixed(2)}
-              </p>
-              {part.listPrice && (
-                <p className="text-sm text-gray-500 line-through">
-                  ${part.listPrice.toFixed(2)}
-                </p>
-              )}
-            </div>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <div className="flex items-center space-x-2 mb-2">
-                <DollarSign className="h-5 w-5 text-gray-600" />
-                <span className="text-sm font-medium text-gray-700">
-                  Total Value
-                </span>
-              </div>
-              <p className="text-2xl font-bold text-gray-900">
-                ${(part.price * part.stockQty).toFixed(2)}
-              </p>
-            </div>
-          </div>
-        </Card>
+  // Handle edit item
+  const handleEditItem = (item: InventoryItem) => {
+    setEditingItem(item);
+    setShowEditModal(true);
+  };
 
-        <Card>
-          <h3 className="text-lg font-bold text-gray-900 mb-4">
-            Technical Specifications
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Weight
-              </label>
-              <p className="text-gray-900">{part.weight} lbs</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Dimensions
-              </label>
-              <p className="text-gray-900">{part.dimensions}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Lead Time
-              </label>
-              <p className="text-gray-900">{part.leadTime}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Minimum Order
-              </label>
-              <p className="text-gray-900">{part.minOrder} units</p>
-            </div>
-          </div>
-          {part.description && (
-            <div className="mt-6">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
-              <p className="text-gray-900">{part.description}</p>
-            </div>
-          )}
-        </Card>
-      </div>
+  // Handle delete item
+  const handleDeleteItem = (itemId: string) => {
+    if (confirm("Are you sure you want to delete this inventory item?")) {
+      setInventoryItems(prev => prev.filter(item => item.id !== itemId));
+    }
+  };
 
-      {/* Sidebar */}
-      <div className="space-y-6">
-        <Card>
-          <h3 className="text-lg font-bold text-gray-900 mb-4">
-            Quick Actions
-          </h3>
-          <div className="space-y-3">
-            <ActionButton
-              icon={Package}
-              label="Update Stock"
-              variant="secondary"
-              onClick={() => {}}
-            />
-            <ActionButton
-              icon={DollarSign}
-              label="Update Price"
-              variant="secondary"
-              onClick={() => {}}
-            />
-            <ActionButton
-              icon={Truck}
-              label="Reorder"
-              variant="secondary"
-              onClick={() => {}}
-            />
-            <ActionButton
-              icon={QrCode}
-              label="View Items"
-              variant="primary"
-              onClick={() => setActiveTab("items")}
-            />
-          </div>
-        </Card>
+  // Handle update item status
+  const updateItemStatus = (itemId: string, newStatus: InventoryItem['status']) => {
+    setInventoryItems(prev => 
+      prev.map(item => 
+        item.id === itemId ? { ...item, status: newStatus } : item
+      )
+    );
+  };
 
-        {part.stockQty <= 10 && (
-          <Card>
-            <div className="flex items-start space-x-3">
-              <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
-              <div>
-                <h4 className="font-medium text-gray-900">Low Stock Warning</h4>
-                <p className="text-sm text-gray-600 mt-1">
-                  This part is running low on stock. Consider reordering soon.
-                </p>
-                <ActionButton
-                  icon={Truck}
-                  label="Reorder Now"
-                  variant="primary"
-                  onClick={() => {}}
-                />
-              </div>
-            </div>
-          </Card>
-        )}
-
-        <Card>
-          <h3 className="text-lg font-bold text-gray-900 mb-4">
-            Supplier Info
-          </h3>
-          <div className="space-y-2">
-            <div>
-              <span className="text-sm font-medium text-gray-700">
-                Lead Time:
-              </span>
-              <p className="text-gray-900">{part.leadTime}</p>
-            </div>
-            <div>
-              <span className="text-sm font-medium text-gray-700">
-                Min Order:
-              </span>
-              <p className="text-gray-900">{part.minOrder} units</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    </div>
-  );
-
-  const renderItemsTab = () => (
-    <div className="space-y-6">
-      <Card>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
-          <h3 className="text-lg font-bold text-gray-900">Part Items</h3>
-          <div className="flex space-x-2 mt-4 sm:mt-0">
-            <ActionButton
-              icon={Plus}
-              label="Add Item"
-              variant="primary"
-              onClick={() => {}}
-            />
-          </div>
-        </div>
-
-        {/* Search and Filter */}
-        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by barcode or location..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Status</option>
-            <option value="available">Available</option>
-            <option value="reserved">Reserved</option>
-            <option value="damaged">Damaged</option>
-            <option value="maintenance">Maintenance</option>
-          </select>
-        </div>
-
-        {/* Items Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-3 px-4 font-medium text-gray-700">
-                  Barcode
-                </th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">
-                  Location
-                </th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">
-                  Status
-                </th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">
-                  Date Added
-                </th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">
-                  Notes
-                </th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredItems.map((item) => (
-                <React.Fragment key={item.id}>
-                  <tr className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4">
-                      <div className="flex items-center space-x-2">
-                        <QrCode className="h-4 w-4 text-gray-400" />
-                        <span className="font-mono text-sm">
-                          {item.barcode}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center space-x-2">
-                        <MapPin className="h-4 w-4 text-gray-400" />
-                        <span>{item.location}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${getItemStatusColor(
-                          item.status
-                        )}`}
-                      >
-                        {item.status.charAt(0).toUpperCase() +
-                          item.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">
-                      {new Date(item.dateAdded).toLocaleDateString()}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">
-                      {item.notes || "-"}
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => setEditingItem(item.id)}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button className="text-red-600 hover:text-red-800">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {editingItem === item.id && <ItemEditRow item={item} />}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {filteredItems.length === 0 && (
-          <div className="text-center py-8">
-            <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">
-              No items found matching your criteria.
-            </p>
-          </div>
-        )}
-      </Card>
-    </div>
-  );
+  // Get stock level color
+  const getStockLevelColor = () => {
+    if (part.totalStock <= part.minStockLevel) return "text-red-600";
+    if (part.totalStock >= part.maxStockLevel) return "text-blue-600";
+    return "text-green-600";
+  };
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={part.name}
-        description={`SKU: ${part.sku} • Category: ${part.category} • ${items.length} items`}
-      >
-        <Link href="/admin/parts">
-          <ActionButton icon={ArrowLeft} label="Back" variant="outline" />
-        </Link>
-        <Link href={`/admin/parts/${part.id}/edit`}>
-          <ActionButton icon={Edit} label="Edit Part" variant="secondary" />
-        </Link>
-        <ActionButton icon={Trash2} label="Delete" variant="danger" />
-      </PageHeader>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="bg-gray-100 hover:bg-gray-200 p-2 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </motion.button>
+              
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Part Administration
+                </h1>
+                <div className="flex items-center space-x-2 mt-1">
+                  <span className="text-gray-600 text-sm">SKU:</span>
+                  <span className="font-mono text-sm bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
+                    {part.sku}
+                  </span>
+                </div>
+              </div>
+            </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveTab("overview")}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === "overview"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-            }`}
-          >
-            Overview
-          </button>
-          <button
-            onClick={() => setActiveTab("items")}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === "items"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-            }`}
-          >
-            Items ({items.length})
-          </button>
-        </nav>
+            <div className="flex items-center space-x-3">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="flex items-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors"
+              >
+                <Eye className="h-4 w-4" />
+                <span>View Product</span>
+              </motion.button>
+              
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                <Edit2 className="h-4 w-4" />
+                <span>Edit Part</span>
+              </motion.button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Tab Content */}
-      {activeTab === "overview" ? renderOverviewTab() : renderItemsTab()}
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-8">
+        {/* Part Overview */}
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Part Info */}
+            <div className="lg:col-span-2">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 mb-2">{part.name}</h2>
+                  <div className="flex items-center space-x-4 text-sm text-gray-600">
+                    <span>Part #: <span className="font-mono">{part.partNumber}</span></span>
+                    <span>Category: {part.category}</span>
+                    <span>Manufacturer: {part.manufacturer}</span>
+                    {part.oem && (
+                      <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-bold">
+                        OEM
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <h3 className="font-bold text-gray-900 mb-2">Description</h3>
+                <p className="text-gray-700 leading-relaxed">{part.description}</p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-gray-900 mb-3">Specifications</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {Object.entries(part.specifications).map(([key, value]) => (
+                    <div key={key} className="flex justify-between items-center py-2 border-b border-gray-100">
+                      <span className="text-gray-600 text-sm">{key}</span>
+                      <span className="font-mono text-sm text-gray-900">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Stock Overview */}
+            <div className="space-y-4">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="font-bold text-gray-900 mb-3">Stock Overview</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Current Stock</span>
+                    <span className={`font-bold text-lg ${getStockLevelColor()}`}>
+                      {part.totalStock}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Min Level</span>
+                    <span className="text-gray-900">{part.minStockLevel}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Max Level</span>
+                    <span className="text-gray-900">{part.maxStockLevel}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Unit Price</span>
+                    <span className="text-gray-900 font-bold">${part.price.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <h4 className="font-bold text-yellow-800 mb-2">Stock Status</h4>
+                {part.totalStock <= part.minStockLevel ? (
+                  <p className="text-red-600 text-sm">⚠️ Low stock level reached</p>
+                ) : part.totalStock >= part.maxStockLevel ? (
+                  <p className="text-blue-600 text-sm">📦 Maximum stock level reached</p>
+                ) : (
+                  <p className="text-green-600 text-sm">✅ Stock levels normal</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Inventory Management */}
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          {/* Header */}
+          <div className="border-b border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Inventory Items</h2>
+              <div className="flex items-center space-x-3">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="flex items-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Export</span>
+                </motion.button>
+                
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="flex items-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg transition-colors"
+                >
+                  <Upload className="h-4 w-4" />
+                  <span>Import</span>
+                </motion.button>
+
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowAddItemModal(true)}
+                  className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Item</span>
+                </motion.button>
+              </div>
+            </div>
+
+            {/* Search and Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="md:col-span-2 relative">
+                <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by barcode, shelf location, or notes..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <select
+                value={locationFilter}
+                onChange={(e) => setLocationFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Locations</option>
+                {locations.map(location => (
+                  <option key={location.id} value={location.name}>{location.name}</option>
+                ))}
+              </select>
+
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Status</option>
+                <option value="available">Available</option>
+                <option value="reserved">Reserved</option>
+                <option value="damaged">Damaged</option>
+                <option value="in-transit">In Transit</option>
+              </select>
+
+              <select
+                value={conditionFilter}
+                onChange={(e) => setConditionFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Conditions</option>
+                <option value="new">New</option>
+                <option value="used">Used</option>
+                <option value="refurbished">Refurbished</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Barcode
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Location
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Shelf Location
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Added On
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Condition
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Added By
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredItems.map((item) => {
+                  const statusInfo = getStatusInfo(item.status);
+                  const StatusIcon = statusInfo.icon;
+                  
+                  return (
+                    <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-2">
+                          <Barcode className="h-4 w-4 text-gray-400" />
+                          <span className="font-mono text-sm text-gray-900">{item.barcode}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-2">
+                          <Building2 className="h-4 w-4 text-gray-400" />
+                          <span className="text-sm text-gray-900">{item.location}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-2">
+                          <MapPin className="h-4 w-4 text-gray-400" />
+                          <span className="font-mono text-sm text-gray-900">{item.shelveLocation}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="h-4 w-4 text-gray-400" />
+                          <span className="text-sm text-gray-900">{item.addedOn}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className={`inline-flex items-center space-x-2 px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
+                          <StatusIcon className="h-3 w-3" />
+                          <span>{statusInfo.label}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getConditionColor(item.condition)}`}>
+                          {item.condition.charAt(0).toUpperCase() + item.condition.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-2">
+                          <User className="h-4 w-4 text-gray-400" />
+                          <span className="text-sm text-gray-900">{item.addedBy}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex items-center space-x-2">
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => handleEditItem(item)}
+                            className="text-blue-600 hover:text-blue-900 p-1"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </motion.button>
+                          
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => handleDeleteItem(item.id)}
+                            className="text-red-600 hover:text-red-900 p-1"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </motion.button>
+
+                          {/* Quick status change */}
+                          <select
+                            value={item.status}
+                            onChange={(e) => updateItemStatus(item.id, e.target.value as InventoryItem['status'])}
+                            className="text-xs border border-gray-200 rounded px-2 py-1"
+                          >
+                            <option value="available">Available</option>
+                            <option value="reserved">Reserved</option>
+                            <option value="damaged">Damaged</option>
+                            <option value="in-transit">In Transit</option>
+                          </select>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {filteredItems.length === 0 && (
+            <div className="text-center py-12">
+              <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No inventory items found</h3>
+              <p className="text-gray-600 mb-4">Try adjusting your search criteria or add a new item.</p>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowAddItemModal(true)}
+                className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add First Item</span>
+              </motion.button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Add Item Modal */}
+      <AnimatePresence>
+        {showAddItemModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-xl p-6 w-full max-w-md"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-bold text-gray-900">Add New Inventory Item</h3>
+                <button
+                  onClick={() => setShowAddItemModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Barcode *
+                  </label>
+                  <input
+                    type="text"
+                    value={newItem.barcode}
+                    onChange={(e) => setNewItem(prev => ({ ...prev, barcode: e.target.value }))}
+                    placeholder="e.g., HP001-007-MW"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Location *
+                  </label>
+                  <select
+                    value={newItem.location}
+                    onChange={(e) => setNewItem(prev => ({ ...prev, location: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">Select a location</option>
+                    {locations.map(location => (
+                      <option key={location.id} value={location.name}>{location.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Shelf Location *
+                  </label>
+                  <input
+                    type="text"
+                    value={newItem.shelveLocation}
+                    onChange={(e) => setNewItem(prev => ({ ...prev, shelveLocation: e.target.value }))}
+                    placeholder="e.g., A-12-05"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Condition
+                  </label>
+                  <select
+                    value={newItem.condition}
+                    onChange={(e) => setNewItem(prev => ({ ...prev, condition: e.target.value as any }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="new">New</option>
+                    <option value="used">Used</option>
+                    <option value="refurbished">Refurbished</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes (Optional)
+                  </label>
+                  <textarea
+                    value={newItem.notes}
+                    onChange={(e) => setNewItem(prev => ({ ...prev, notes: e.target.value }))}
+                    placeholder="Additional notes about this item..."
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex space-x-3 mt-6">
+                <button
+                  onClick={() => setShowAddItemModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleAddItem}
+                  disabled={!newItem.barcode || !newItem.location || !newItem.shelveLocation}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                >
+                  Add Item
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Item Modal */}
+      <AnimatePresence>
+        {showEditModal && editingItem && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-xl p-6 w-full max-w-md"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-bold text-gray-900">Edit Inventory Item</h3>
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Barcode
+                  </label>
+                  <input
+                    type="text"
+                    value={editingItem.barcode}
+                    onChange={(e) => setEditingItem(prev => prev ? ({ ...prev, barcode: e.target.value }) : null)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Location
+                  </label>
+                  <select
+                    value={editingItem.location}
+                    onChange={(e) => setEditingItem(prev => prev ? ({ ...prev, location: e.target.value }) : null)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {locations.map(location => (
+                      <option key={location.id} value={location.name}>{location.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Shelf Location
+                  </label>
+                  <input
+                    type="text"
+                    value={editingItem.shelveLocation}
+                    onChange={(e) => setEditingItem(prev => prev ? ({ ...prev, shelveLocation: e.target.value }) : null)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={editingItem.status}
+                    onChange={(e) => setEditingItem(prev => prev ? ({ ...prev, status: e.target.value as InventoryItem['status'] }) : null)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="available">Available</option>
+                    <option value="reserved">Reserved</option>
+                    <option value="damaged">Damaged</option>
+                    <option value="in-transit">In Transit</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Condition
+                  </label>
+                  <select
+                    value={editingItem.condition}
+                    onChange={(e) => setEditingItem(prev => prev ? ({ ...prev, condition: e.target.value as InventoryItem['condition'] }) : null)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="new">New</option>
+                    <option value="used">Used</option>
+                    <option value="refurbished">Refurbished</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    value={editingItem.notes || ""}
+                    onChange={(e) => setEditingItem(prev => prev ? ({ ...prev, notes: e.target.value }) : null)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex space-x-3 mt-6">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    if (editingItem) {
+                      setInventoryItems(prev => 
+                        prev.map(item => 
+                          item.id === editingItem.id ? editingItem : item
+                        )
+                      );
+                      setShowEditModal(false);
+                      setEditingItem(null);
+                    }
+                  }}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                >
+                  Save Changes
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
-export default PartDetailPage;
+export default AdminPartDetail;
