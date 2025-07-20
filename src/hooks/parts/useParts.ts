@@ -18,7 +18,7 @@ interface UsePartsOptions {
   isActive?: boolean;
   minPrice?: number;
   maxPrice?: number;
-  enabled?: boolean; // Allow disabling the query
+  enabled?: boolean;
 }
 
 interface UsePartsReturn {

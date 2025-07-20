@@ -15,12 +15,12 @@ export async function GET(
   try {
     const { userId } = await getUserToken(req);
 
-    if (!userId) {
-      return NextResponse.json(
-        { status: "Error", data: null, message: "Unauthorized" },
-        { status: HttpStatusCode.Unauthorized }
-      );
-    }
+    // if (!userId) {
+    //   return NextResponse.json(
+    //     { status: "Error", data: null, message: "Unauthorized" },
+    //     { status: HttpStatusCode.Unauthorized }
+    //   );
+    // }
 
     const { id } = params;
 

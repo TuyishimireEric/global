@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -29,34 +30,44 @@ import {
   MessageCircle,
   Settings,
   X,
+  Loader2,
 } from "lucide-react";
+import { usePartById } from "@/hooks/parts/usePartById";
 
-// Mock data types
+// Real API data types
+interface CreatedBy {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
+interface Dimensions {
+  unit: string;
+  height: number;
+  diameter: number;
+}
+
 interface Part {
   id: string;
-  name: string;
-  sku: string;
-  category: string;
-  manufacturer: string;
-  price: number;
-  listPrice?: number;
-  discount?: number;
-  availability: "in-stock" | "low-stock" | "on-order" | "out-stock";
-  stockQty: number;
-  minOrder: number;
-  compatibility: string[];
-  images: string[];
-  featured?: boolean;
-  rating?: number;
-  reviews?: number;
-  description: string;
-  specifications: Record<string, string>;
-  warranty: string;
-  weight: string;
-  dimensions: string;
-  installation: string;
   partNumber: string;
-  oem: boolean;
+  name: string;
+  description: string;
+  brand: string;
+  category: string;
+  subcategory: string;
+  compatibleModels: string[];
+  specifications: Record<string, string>;
+  images: string[];
+  price: string;
+  discount: string;
+  costPrice: string;
+  weight: string;
+  dimensions: Dimensions;
+  minimumStock: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: CreatedBy;
 }
 
 interface Review {
@@ -75,127 +86,7 @@ interface QuoteItem {
   quantity: number;
 }
 
-// Sample product data
-const sampleProduct: Part = {
-  id: "1",
-  name: "Hydraulic Pump Assembly",
-  sku: "CAT-320-HP-001",
-  category: "Hydraulic System",
-  manufacturer: "Caterpillar",
-  price: 2450.00,
-  listPrice: 2800.00,
-  discount: 12,
-  availability: "in-stock",
-  stockQty: 15,
-  minOrder: 1,
-  compatibility: ["320D", "320E", "323D", "323E", "320F", "323F"],
-  images: [
-    "/api/placeholder/600/450",
-    "/api/placeholder/600/450",
-    "/api/placeholder/600/450",
-    "/api/placeholder/600/450"
-  ],
-  featured: true,
-  rating: 4.8,
-  reviews: 147,
-  description: "High-performance hydraulic pump assembly designed for CAT 320 series excavators. Engineered to deliver optimal flow rates and pressure for maximum excavator performance. Built with premium materials and precision manufacturing for long-lasting durability.",
-  specifications: {
-    "Flow Rate": "165 L/min",
-    "Operating Pressure": "35 MPa",
-    "Port Size": "3/4 inch",
-    "Material": "Cast Iron with Steel Components",
-    "Temperature Range": "-20°C to +80°C",
-    "Seal Type": "Nitrile Rubber",
-    "Mounting": "SAE Standard",
-    "Filtration": "25 micron"
-  },
-  warranty: "24 months / 2000 hours",
-  weight: "45.2 kg",
-  dimensions: "420mm x 280mm x 350mm",
-  installation: "Professional installation recommended",
-  partNumber: "320-3064",
-  oem: true
-};
-
-// Sample related products
-const relatedProducts: Part[] = [
-  {
-    id: "2",
-    name: "Hydraulic Filter Kit",
-    sku: "CAT-320-HF-002",
-    category: "Hydraulic System",
-    manufacturer: "Caterpillar",
-    price: 89.99,
-    listPrice: 120.00,
-    discount: 25,
-    availability: "in-stock",
-    stockQty: 45,
-    minOrder: 2,
-    compatibility: ["320D", "320E", "320F"],
-    images: ["/api/placeholder/300/225"],
-    rating: 4.6,
-    reviews: 89,
-    description: "Premium hydraulic filter kit",
-    specifications: {},
-    warranty: "12 months",
-    weight: "2.1 kg",
-    dimensions: "200mm x 150mm x 100mm",
-    installation: "Easy DIY installation",
-    partNumber: "320-3065",
-    oem: true
-  },
-  {
-    id: "3",
-    name: "Hydraulic Cylinder Seal Kit",
-    sku: "CAT-320-SK-004",
-    category: "Hydraulic System",
-    manufacturer: "Reman Factory",
-    price: 245.00,
-    listPrice: 289.00,
-    discount: 15,
-    availability: "in-stock",
-    stockQty: 28,
-    minOrder: 1,
-    compatibility: ["320D", "320E", "320F", "323D"],
-    images: ["/api/placeholder/300/225"],
-    featured: true,
-    rating: 4.7,
-    reviews: 156,
-    description: "Complete hydraulic cylinder seal kit",
-    specifications: {},
-    warranty: "18 months",
-    weight: "1.8 kg",
-    dimensions: "150mm x 150mm x 50mm",
-    installation: "Professional installation required",
-    partNumber: "320-3066",
-    oem: false
-  },
-  {
-    id: "4",
-    name: "Hydraulic Hose Assembly",
-    sku: "CAT-320-HA-005",
-    category: "Hydraulic System",
-    manufacturer: "Caterpillar",
-    price: 156.50,
-    availability: "low-stock",
-    stockQty: 8,
-    minOrder: 1,
-    compatibility: ["320D", "320E", "323D"],
-    images: ["/api/placeholder/300/225"],
-    rating: 4.5,
-    reviews: 67,
-    description: "High-pressure hydraulic hose assembly",
-    specifications: {},
-    warranty: "12 months",
-    weight: "3.2 kg",
-    dimensions: "1200mm length",
-    installation: "Professional installation recommended",
-    partNumber: "320-3067",
-    oem: true
-  }
-];
-
-// Sample reviews
+// Sample reviews for now (you can replace with real reviews API later)
 const sampleReviews: Review[] = [
   {
     id: "1",
@@ -203,7 +94,7 @@ const sampleReviews: Review[] = [
     rating: 5,
     date: "2024-06-15",
     title: "Excellent replacement part",
-    content: "Perfect fit for my 320D. Installation was straightforward and performance is as good as the original. Highly recommend for anyone needing a hydraulic pump replacement.",
+    content: "Perfect fit for my engine. Installation was straightforward and performance is as good as the original. Highly recommend for anyone needing a fuel filter replacement.",
     verified: true,
     helpful: 12
   },
@@ -222,16 +113,46 @@ const sampleReviews: Review[] = [
     user: "Robert Chen",
     rating: 5,
     date: "2024-06-05",
-    title: "Perfect match for 320E",
-    content: "Exact OEM specifications. Works perfectly on my 320E. The flow rate and pressure are exactly as advertised. Worth every penny.",
+    title: "Perfect OEM replacement",
+    content: "Exact OEM specifications. Works perfectly on my C15 engine. The filtration efficiency is exactly as advertised. Worth every penny.",
     verified: true,
     helpful: 15
   }
 ];
 
+// Sample related products (you can replace with real related products API later)
+const relatedProducts: Partial<Part>[] = [
+  {
+    id: "2",
+    name: "Primary Fuel Filter",
+    partNumber: "1R-0750",
+    brand: "Caterpillar",
+    category: "Filtration",
+    price: "45.99",
+    discount: "10.00",
+    images: ["/api/placeholder/300/225"],
+    compatibleModels: ["CAT C15", "CAT C13"],
+    description: "Primary fuel filter for diesel engines"
+  },
+  {
+    id: "3",
+    name: "Fuel Water Separator",
+    partNumber: "1R-0751",
+    brand: "Caterpillar",
+    category: "Filtration",
+    price: "156.50",
+    discount: "15.00",
+    images: ["/api/placeholder/300/225"],
+    compatibleModels: ["CAT C15", "CAT C13", "CAT C12"],
+    description: "High-efficiency fuel water separator"
+  }
+];
+
 const ProductDetails: React.FC = () => {
-  const [product] = useState<Part>(sampleProduct);
-  const [related] = useState<Part[]>(relatedProducts);
+  const params = useParams();
+  const partId = params.id as string;
+  
+  const { data: product, isLoading, error } = usePartById(partId);
   const [reviews] = useState<Review[]>(sampleReviews);
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -239,10 +160,40 @@ const ProductDetails: React.FC = () => {
   const [quoteItems, setQuoteItems] = useState<QuoteItem[]>([]);
   const [showImageModal, setShowImageModal] = useState(false);
 
-  const savings = product.listPrice ? product.listPrice - product.price : 0;
-  const savingsPercent = product.listPrice
-    ? Math.round((savings / product.listPrice) * 100)
-    : 0;
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 text-yellow-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading product details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error || !product) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Product Not Found</h2>
+          <p className="text-gray-600">The requested product could not be loaded.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate pricing
+  const priceNumber = parseFloat(product.price);
+  const discountNumber = parseFloat(product.discount);
+  const listPrice = discountNumber > 0 ? priceNumber + discountNumber : undefined;
+  const discountPercent = listPrice ? Math.round((discountNumber / listPrice) * 100) : 0;
+
+  // Mock availability (you can add this to your API later)
+  const availability = product.isActive ? "in-stock" : "out-stock";
+  const stockQty = 15; // Mock stock quantity
 
   const addToQuote = (partId: string, qty: number) => {
     setQuoteItems((prev) => {
@@ -298,44 +249,35 @@ const ProductDetails: React.FC = () => {
     );
   };
 
-  const RelatedProductCard = ({ part }: { part: Part }) => {
-    const partSavings = part.listPrice ? part.listPrice - part.price : 0;
-    const partSavingsPercent = part.listPrice
-      ? Math.round((partSavings / part.listPrice) * 100)
-      : 0;
+  const RelatedProductCard = ({ part }: { part: Partial<Part> }) => {
+    const partPrice = parseFloat(part.price || "0");
+    const partDiscount = parseFloat(part.discount || "0");
+    const partListPrice = partDiscount > 0 ? partPrice + partDiscount : undefined;
+    const partDiscountPercent = partListPrice ? Math.round((partDiscount / partListPrice) * 100) : 0;
 
     return (
       <motion.div
         whileHover={{ y: -4 }}
         className="bg-white border border-gray-200 rounded-xl hover:border-yellow-400 hover:shadow-lg transition-all duration-300 group relative overflow-hidden"
       >
-        {part.featured && (
-          <div className="absolute top-2 left-2 z-20">
-            <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-white px-2 py-1 rounded-full text-xs font-black uppercase tracking-wide shadow-lg">
-              <Zap className="h-3 w-3 inline mr-1" />
-              Featured
-            </div>
-          </div>
-        )}
-
-        {part.discount && (
+        {partDiscountPercent > 0 && (
           <div className="absolute top-2 right-2 z-20">
             <div className="bg-gradient-to-r from-red-500 to-red-600 text-white px-2 py-1 rounded-lg text-xs font-bold shadow-lg">
-              -{part.discount}% OFF
+              -{partDiscountPercent}% OFF
             </div>
           </div>
         )}
 
         <div className="relative aspect-[4/3] overflow-hidden">
           <img
-            src={part.images[0]}
+            src={part.images?.[0] || "/api/placeholder/300/225"}
             alt={part.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
           
           <div className="absolute bottom-2 left-2">
             <div className="bg-white/90 backdrop-blur-sm border border-yellow-500 text-yellow-600 px-2 py-1 rounded text-xs font-bold">
-              {part.manufacturer}
+              {part.brand}
             </div>
           </div>
         </div>
@@ -344,16 +286,8 @@ const ProductDetails: React.FC = () => {
           <div className="mb-3">
             <div className="flex items-center justify-between mb-2">
               <span className="font-mono text-yellow-600 text-xs font-bold bg-yellow-100 px-2 py-1 rounded border border-yellow-200">
-                {part.sku}
+                {part.partNumber}
               </span>
-              {part.rating && (
-                <div className="flex items-center space-x-1">
-                  <Star className="h-3 w-3 text-yellow-500 fill-current" />
-                  <span className="text-yellow-600 font-medium text-xs">
-                    {part.rating}
-                  </span>
-                </div>
-              )}
             </div>
 
             <h3 className="font-bold text-gray-900 text-sm leading-tight group-hover:text-yellow-600 transition-colors duration-300 mb-2">
@@ -364,32 +298,27 @@ const ProductDetails: React.FC = () => {
           <div className="mb-4">
             <div className="flex items-baseline space-x-2 mb-1">
               <span className="text-lg font-black text-yellow-600">
-                ${part.price.toFixed(2)}
+                ${partPrice.toFixed(2)}
               </span>
-              {part.listPrice && (
+              {partListPrice && (
                 <span className="text-sm text-gray-500 line-through">
-                  ${part.listPrice.toFixed(2)}
+                  ${partListPrice.toFixed(2)}
                 </span>
               )}
             </div>
-            {partSavingsPercent > 0 && (
+            {partDiscountPercent > 0 && (
               <p className="text-xs font-bold text-yellow-600">
-                Save ${partSavings.toFixed(2)} ({partSavingsPercent}% off)
+                Save ${partDiscount.toFixed(2)} ({partDiscountPercent}% off)
               </p>
             )}
           </div>
 
           <button
-            onClick={() => addToQuote(part.id, part.minOrder)}
-            disabled={part.availability === "out-stock"}
-            className="w-full text-sm bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed text-white disabled:text-gray-500 py-2 px-3 rounded-lg font-bold transition-all duration-300 shadow-md hover:shadow-yellow-500/30 flex items-center justify-center space-x-2"
+            onClick={() => part.id && addToQuote(part.id, 1)}
+            className="w-full text-sm bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-white py-2 px-3 rounded-lg font-bold transition-all duration-300 shadow-md hover:shadow-yellow-500/30 flex items-center justify-center space-x-2"
           >
             <FileText className="h-4 w-4" />
-            <span>
-              {part.availability === "out-stock"
-                ? "Out of Stock"
-                : "Add to Quote"}
-            </span>
+            <span>Add to Quote</span>
           </button>
         </div>
       </motion.div>
@@ -426,6 +355,8 @@ const ProductDetails: React.FC = () => {
           <ChevronRight className="h-4 w-4" />
           <span className="hover:text-yellow-600 cursor-pointer">{product.category}</span>
           <ChevronRight className="h-4 w-4" />
+          <span className="hover:text-yellow-600 cursor-pointer">{product.subcategory}</span>
+          <ChevronRight className="h-4 w-4" />
           <span className="text-gray-900 font-medium">{product.name}</span>
         </nav>
 
@@ -439,7 +370,7 @@ const ProductDetails: React.FC = () => {
                 onClick={() => setShowImageModal(true)}
               >
                 <img
-                  src={product.images[selectedImage]}
+                  src={product.images[selectedImage] || "/api/placeholder/600/450"}
                   alt={product.name}
                   className="w-full h-full object-cover"
                 />
@@ -451,26 +382,28 @@ const ProductDetails: React.FC = () => {
               </motion.div>
               
               {/* Image Thumbnails */}
-              <div className="flex space-x-3 mt-4">
-                {product.images.map((image, index) => (
-                  <motion.button
-                    key={index}
-                    whileHover={{ scale: 1.05 }}
-                    onClick={() => setSelectedImage(index)}
-                    className={`aspect-square w-20 rounded-lg border-2 overflow-hidden ${
-                      selectedImage === index
-                        ? "border-yellow-500"
-                        : "border-gray-200 hover:border-yellow-300"
-                    }`}
-                  >
-                    <img
-                      src={image}
-                      alt={`${product.name} ${index + 1}`}
-                      className="w-full h-full object-cover"
-                    />
-                  </motion.button>
-                ))}
-              </div>
+              {product.images.length > 1 && (
+                <div className="flex space-x-3 mt-4">
+                  {product.images.map((image: string, index: number) => (
+                    <motion.button
+                      key={index}
+                      whileHover={{ scale: 1.05 }}
+                      onClick={() => setSelectedImage(index)}
+                      className={`aspect-square w-20 rounded-lg border-2 overflow-hidden ${
+                        selectedImage === index
+                          ? "border-yellow-500"
+                          : "border-gray-200 hover:border-yellow-300"
+                      }`}
+                    >
+                      <img
+                        src={image}
+                        alt={`${product.name} ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </motion.button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -481,7 +414,7 @@ const ProductDetails: React.FC = () => {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <span className="font-mono text-yellow-600 text-sm font-bold bg-yellow-100 px-3 py-1 rounded-lg border border-yellow-200 mb-2 inline-block">
-                    {product.sku}
+                    {product.partNumber}
                   </span>
                   <h1 className="text-3xl font-black text-gray-900 mb-2">
                     {product.name}
@@ -490,13 +423,11 @@ const ProductDetails: React.FC = () => {
                     <div className="flex items-center space-x-2">
                       <Award className="h-4 w-4 text-yellow-600" />
                       <span className="text-sm font-medium text-gray-700">
-                        {product.manufacturer}
+                        {product.brand}
                       </span>
-                      {product.oem && (
-                        <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-bold">
-                          OEM
-                        </span>
-                      )}
+                      <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-bold">
+                        OEM
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -519,72 +450,56 @@ const ProductDetails: React.FC = () => {
                 </div>
               </div>
 
-              {/* Rating and Reviews */}
-              {product.rating && (
-                <div className="flex items-center space-x-4 mb-4">
-                  <div className="flex items-center space-x-2">
-                    <div className="flex items-center">
-                      {Array.from({ length: 5 }, (_, i) => (
-                        <Star
-                          key={i}
-                          className={`h-5 w-5 ${
-                            i < Math.floor(product.rating!)
-                              ? "text-yellow-500 fill-current"
-                              : "text-gray-300"
-                          }`}
-                        />
-                      ))}
-                    </div>
-                    <span className="text-lg font-bold text-gray-900">
-                      {product.rating}
-                    </span>
-                    <span className="text-gray-600">
-                      ({product.reviews} reviews)
-                    </span>
+              {/* Mock Rating */}
+              <div className="flex items-center space-x-4 mb-4">
+                <div className="flex items-center space-x-2">
+                  <div className="flex items-center">
+                    {Array.from({ length: 5 }, (_, i) => (
+                      <Star
+                        key={i}
+                        className={`h-5 w-5 ${
+                          i < 4 ? "text-yellow-500 fill-current" : "text-gray-300"
+                        }`}
+                      />
+                    ))}
                   </div>
+                  <span className="text-lg font-bold text-gray-900">4.8</span>
+                  <span className="text-gray-600">(147 reviews)</span>
                 </div>
-              )}
-
-              {/* Featured Badge */}
-              {product.featured && (
-                <div className="inline-flex items-center bg-gradient-to-r from-yellow-400 to-yellow-500 text-white px-4 py-2 rounded-full text-sm font-black uppercase tracking-wide shadow-lg mb-4">
-                  <Zap className="h-4 w-4 mr-2" />
-                  Featured Product
-                </div>
-              )}
+              </div>
             </div>
 
             {/* Pricing */}
             <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
               <div className="flex items-baseline space-x-3 mb-2">
                 <span className="text-4xl font-black text-yellow-600">
-                  ${product.price.toFixed(2)}
+                  ${priceNumber.toFixed(2)}
                 </span>
-                {product.listPrice && (
+                {listPrice && (
                   <span className="text-2xl text-gray-500 line-through">
-                    ${product.listPrice.toFixed(2)}
+                    ${listPrice.toFixed(2)}
                   </span>
                 )}
-                {product.discount && (
+                {discountPercent > 0 && (
                   <div className="bg-red-500 text-white px-3 py-1 rounded-lg text-sm font-bold">
-                    -{product.discount}% OFF
+                    -{discountPercent}% OFF
                   </div>
                 )}
               </div>
-              {savingsPercent > 0 && (
+              {discountPercent > 0 && (
                 <p className="text-lg font-bold text-yellow-600 mb-4">
-                  You save ${savings.toFixed(2)} ({savingsPercent}% off)
+                  You save ${discountNumber.toFixed(2)} ({discountPercent}% off)
                 </p>
               )}
               
               <div className="text-sm text-gray-600">
                 <p>Part Number: <span className="font-mono font-bold">{product.partNumber}</span></p>
-                <p>Minimum Order: {product.minOrder} unit{product.minOrder > 1 ? 's' : ''}</p>
+                <p>Minimum Order: {product.minimumStock} unit{product.minimumStock > 1 ? 's' : ''}</p>
               </div>
             </div>
 
             {/* Availability */}
-            <AvailabilityBadge availability={product.availability} stockQty={product.stockQty} />
+            <AvailabilityBadge availability={availability} stockQty={stockQty} />
 
             {/* Key Features */}
             <div className="bg-white border border-gray-200 rounded-xl p-6">
@@ -597,28 +512,30 @@ const ProductDetails: React.FC = () => {
                   <Package className="h-4 w-4 text-gray-500" />
                   <div>
                     <p className="text-sm font-medium text-gray-900">Weight</p>
-                    <p className="text-sm text-gray-600">{product.weight}</p>
+                    <p className="text-sm text-gray-600">{product.weight} kg</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-3">
                   <Shield className="h-4 w-4 text-gray-500" />
                   <div>
                     <p className="text-sm font-medium text-gray-900">Warranty</p>
-                    <p className="text-sm text-gray-600">{product.warranty}</p>
+                    <p className="text-sm text-gray-600">24 months</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-3">
                   <Wrench className="h-4 w-4 text-gray-500" />
                   <div>
                     <p className="text-sm font-medium text-gray-900">Installation</p>
-                    <p className="text-sm text-gray-600">{product.installation}</p>
+                    <p className="text-sm text-gray-600">Professional recommended</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-3">
                   <Truck className="h-4 w-4 text-gray-500" />
                   <div>
                     <p className="text-sm font-medium text-gray-900">Dimensions</p>
-                    <p className="text-sm text-gray-600">{product.dimensions}</p>
+                    <p className="text-sm text-gray-600">
+                      {product.dimensions.height}mm × {product.dimensions.diameter}mm
+                    </p>
                   </div>
                 </div>
               </div>
@@ -630,7 +547,7 @@ const ProductDetails: React.FC = () => {
                 <label className="text-sm font-medium text-gray-700">Quantity:</label>
                 <div className="flex items-center border border-gray-200 rounded-lg">
                   <button
-                    onClick={() => setQuantity(Math.max(product.minOrder, quantity - 1))}
+                    onClick={() => setQuantity(Math.max(product.minimumStock, quantity - 1))}
                     className="p-2 hover:bg-gray-100 rounded-l-lg transition-colors"
                   >
                     <Minus className="h-4 w-4" />
@@ -647,7 +564,7 @@ const ProductDetails: React.FC = () => {
                 </div>
                 <span className="text-sm text-gray-600">
                   Total: <span className="font-bold text-yellow-600">
-                    ${(product.price * quantity).toFixed(2)}
+                    ${(priceNumber * quantity).toFixed(2)}
                   </span>
                 </span>
               </div>
@@ -657,14 +574,12 @@ const ProductDetails: React.FC = () => {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => addToQuote(product.id, quantity)}
-                  disabled={product.availability === "out-stock"}
+                  disabled={availability === "out-stock"}
                   className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed text-white disabled:text-gray-500 py-3 px-4 rounded-lg font-bold transition-all duration-300 shadow-md hover:shadow-yellow-500/30 flex items-center justify-center space-x-2"
                 >
                   <FileText className="h-5 w-5" />
                   <span>
-                    {product.availability === "out-stock"
-                      ? "Out of Stock"
-                      : "Add to Quote"}
+                    {availability === "out-stock" ? "Out of Stock" : "Add to Quote"}
                   </span>
                 </motion.button>
 
@@ -705,7 +620,7 @@ const ProductDetails: React.FC = () => {
                   <span>{label}</span>
                   {id === "reviews" && (
                     <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs">
-                      {product.reviews}
+                      {reviews.length}
                     </span>
                   )}
                 </button>
@@ -768,7 +683,7 @@ const ProductDetails: React.FC = () => {
                     {Object.entries(product.specifications).map(([key, value]) => (
                       <div key={key} className="flex justify-between items-center py-3 border-b border-gray-100">
                         <span className="font-medium text-gray-700">{key}</span>
-                        <span className="text-gray-900 font-mono">{value}</span>
+                        <span className="text-gray-900 font-mono">{value ?? ""}</span>
                       </div>
                     ))}
                   </div>
@@ -798,16 +713,16 @@ const ProductDetails: React.FC = () => {
                 >
                   <h3 className="text-xl font-bold text-gray-900 mb-4">Compatible Models</h3>
                   <p className="text-gray-600 mb-6">
-                    This hydraulic pump assembly is compatible with the following CAT excavator models:
+                    This {product.name.toLowerCase()} is compatible with the following CAT engine models:
                   </p>
                   
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-8">
-                    {product.compatibility.map((model) => (
+                    {product.compatibleModels.map((model: string) => (
                       <div
                         key={model}
                         className="bg-yellow-100 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-lg text-center font-bold"
                       >
-                        CAT {model}
+                        {model}
                       </div>
                     ))}
                   </div>
@@ -824,11 +739,11 @@ const ProductDetails: React.FC = () => {
                       </div>
                       <div className="flex items-start space-x-3">
                         <CheckCircle className="h-4 w-4 text-green-500 mt-0.5" />
-                        <span>Ensure hydraulic system is properly flushed before installation</span>
+                        <span>Ensure fuel system is properly cleaned before installation</span>
                       </div>
                       <div className="flex items-start space-x-3">
                         <CheckCircle className="h-4 w-4 text-green-500 mt-0.5" />
-                        <span>Use genuine CAT hydraulic fluid for best results</span>
+                        <span>Use genuine CAT fuel for best filtration results</span>
                       </div>
                       <div className="flex items-start space-x-3">
                         <CheckCircle className="h-4 w-4 text-green-500 mt-0.5" />
@@ -852,19 +767,17 @@ const ProductDetails: React.FC = () => {
                     <div className="flex items-center space-x-4">
                       <div className="flex items-center space-x-2">
                         <div className="flex items-center">
-                          {Array.from({ length: 5 }, (_, i) => (
+                          {Array.from({ length: 5 }, (_: unknown, i: number) => (
                             <Star
                               key={i}
                               className={`h-4 w-4 ${
-                                i < Math.floor(product.rating!)
-                                  ? "text-yellow-500 fill-current"
-                                  : "text-gray-300"
+                                i < 4 ? "text-yellow-500 fill-current" : "text-gray-300"
                               }`}
                             />
                           ))}
                         </div>
-                        <span className="font-bold text-gray-900">{product.rating}</span>
-                        <span className="text-gray-600">({product.reviews} reviews)</span>
+                        <span className="font-bold text-gray-900">4.8</span>
+                        <span className="text-gray-600">({reviews.length} reviews)</span>
                       </div>
                     </div>
                   </div>
@@ -888,7 +801,7 @@ const ProductDetails: React.FC = () => {
                               </div>
                               <div className="flex items-center space-x-2 mt-1">
                                 <div className="flex items-center">
-                                  {Array.from({ length: 5 }, (_, i) => (
+                                  {Array.from({ length: 5 }, (_: unknown, i: number) => (
                                     <Star
                                       key={i}
                                       className={`h-4 w-4 ${
@@ -944,8 +857,8 @@ const ProductDetails: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {related.map((product) => (
-              <RelatedProductCard key={product.id} part={product} />
+            {relatedProducts.map((relatedProduct) => (
+              <RelatedProductCard key={relatedProduct.id} part={relatedProduct} />
             ))}
           </div>
         </div>
@@ -1021,25 +934,27 @@ const ProductDetails: React.FC = () => {
               </button>
               
               <img
-                src={product.images[selectedImage]}
+                src={product.images[selectedImage] || "/api/placeholder/600/450"}
                 alt={product.name}
                 className="w-full h-full object-contain rounded-lg"
               />
               
               {/* Image Navigation */}
-              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
-                {product.images.map((_, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setSelectedImage(index)}
-                    className={`w-3 h-3 rounded-full transition-colors ${
-                      selectedImage === index
-                        ? "bg-white"
-                        : "bg-white/50 hover:bg-white/75"
-                    }`}
-                  />
-                ))}
-              </div>
+              {product.images.length > 1 && (
+                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
+                  {product.images.map((_: string, index: number) => (
+                    <button
+                      key={index}
+                      onClick={() => setSelectedImage(index)}
+                      className={`w-3 h-3 rounded-full transition-colors ${
+                        selectedImage === index
+                          ? "bg-white"
+                          : "bg-white/50 hover:bg-white/75"
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}
