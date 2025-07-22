@@ -13,6 +13,7 @@ import {
 } from "@/server/queries/partItems";
 import { z } from "zod";
 import { HttpStatusCode } from "axios";
+import { getUserToken } from "@/utils/getToken";
 
 export async function GET(request: NextRequest) {
   try {
@@ -88,9 +89,16 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/part-items
 export async function POST(request: NextRequest) {
   try {
+    const { userId } = await getUserToken(request);
+
+    if (!userId) {
+      return NextResponse.json(
+        { status: "Error", data: null, message: "Unauthorized" },
+        { status: HttpStatusCode.Unauthorized }
+      );
+    }
     const body = await request.json();
     const { searchParams } = new URL(request.url);
 
@@ -100,7 +108,7 @@ export async function POST(request: NextRequest) {
     if (isBulk) {
       // Validate bulk insert data
       const validatedData = bulkInsertSchema.parse(body);
-      const newPartItems = await bulkInsertPartItems(validatedData);
+      const newPartItems = await bulkInsertPartItems(validatedData, userId);
 
       return NextResponse.json(
         {
@@ -113,7 +121,8 @@ export async function POST(request: NextRequest) {
     } else {
       // Single part item creation
       const validatedData = partItemSchema.parse(body);
-      const newPartItem = await createPartItem(validatedData);
+
+      const newPartItem = await createPartItem(validatedData, userId);
 
       return NextResponse.json(
         {

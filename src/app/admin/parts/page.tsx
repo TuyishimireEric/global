@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import useClientParts, { usePartsMetadata } from "@/hooks/parts/useParts";
 import { Part, PartsQueryParams } from "@/types/parts";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const AdminPartsListing: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -105,14 +107,17 @@ const AdminPartsListing: React.FC = () => {
   // Calculate stats
   const stats = useMemo(() => {
     const totalParts = totalCount;
-    const totalStockQty = backendParts.reduce((sum, part) => sum + (part.stockQty || 0), 0);
+    const totalStockQty = backendParts.reduce(
+      (sum, part) => sum + (part.stockQty || 0),
+      0
+    );
     const totalStockValue = backendParts.reduce((sum, part) => {
       const price = parseFloat(part.price || "0");
       const qty = part.stockQty || 0;
-      return sum + (price * qty);
+      return sum + price * qty;
     }, 0);
-    const lowStockCount = backendParts.filter(part => 
-      (part.stockQty || 0) <= (part.minimumStock || 10)
+    const lowStockCount = backendParts.filter(
+      (part) => (part.stockQty || 0) <= (part.minimumStock || 10)
     ).length;
 
     return {
@@ -135,7 +140,7 @@ const AdminPartsListing: React.FC = () => {
 
   // Handle filter changes
   const handleFilterChange = (filterType: string, value: any) => {
-    setSelectedFilters(prev => ({
+    setSelectedFilters((prev) => ({
       ...prev,
       [filterType]: value,
     }));
@@ -165,37 +170,17 @@ const AdminPartsListing: React.FC = () => {
   const getAvailabilityStatus = (part: Part) => {
     const stock = part.stockQty || 0;
     const minStock = part.minimumStock || 10;
-    
+
     if (stock === 0) return "out-stock";
     if (stock <= minStock) return "low-stock";
     return "in-stock";
   };
 
-  // Get availability badge
-  const getAvailabilityBadge = (status: string) => {
-    const badges = {
-      "in-stock": { icon: CheckCircle, color: "text-green-600 bg-green-50", label: "In Stock" },
-      "low-stock": { icon: AlertTriangle, color: "text-yellow-600 bg-yellow-50", label: "Low Stock" },
-      "out-stock": { icon: XCircle, color: "text-red-600 bg-red-50", label: "Out of Stock" },
-      "on-order": { icon: Clock, color: "text-blue-600 bg-blue-50", label: "On Order" },
-    };
-    
-    const badge = badges[status as keyof typeof badges] || badges["out-stock"];
-    const Icon = badge.icon;
-    
-    return (
-      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${badge.color}`}>
-        <Icon className="h-3 w-3 mr-1" />
-        {badge.label}
-      </span>
-    );
-  };
-
   // Handle part selection
   const togglePartSelection = (partId: string) => {
-    setSelectedParts(prev =>
+    setSelectedParts((prev) =>
       prev.includes(partId)
-        ? prev.filter(id => id !== partId)
+        ? prev.filter((id) => id !== partId)
         : [...prev, partId]
     );
   };
@@ -204,8 +189,14 @@ const AdminPartsListing: React.FC = () => {
     if (selectedParts.length === transformedParts.length) {
       setSelectedParts([]);
     } else {
-      setSelectedParts(transformedParts.map(part => part.id));
+      setSelectedParts(transformedParts.map((part) => part.id));
     }
+  };
+
+  const router = useRouter();
+
+  const handlePartDetails = (id: string) => {
+    router.push(`/admin/parts/${id}`);
   };
 
   if (isError) {
@@ -213,8 +204,12 @@ const AdminPartsListing: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="bg-white border border-red-200 rounded-xl p-8 max-w-md mx-auto shadow-sm">
           <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-gray-900 mb-2">Error Loading Parts</h3>
-          <p className="text-gray-600 mb-4">{error?.message || "Something went wrong"}</p>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">
+            Error Loading Parts
+          </h3>
+          <p className="text-gray-600 mb-4">
+            {error?.message || "Something went wrong"}
+          </p>
           <button
             onClick={() => refetch()}
             className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:shadow-md transition-all duration-300 w-full"
@@ -239,7 +234,9 @@ const AdminPartsListing: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Parts</p>
-                <p className="text-3xl font-bold text-gray-900">{stats.totalParts.toLocaleString()}</p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {stats.totalParts.toLocaleString()}
+                </p>
               </div>
               <Package className="h-12 w-12 text-blue-500" />
             </div>
@@ -253,8 +250,12 @@ const AdminPartsListing: React.FC = () => {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Stock Qty</p>
-                <p className="text-3xl font-bold text-gray-900">{stats.totalStockQty.toLocaleString()}</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Total Stock Qty
+                </p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {stats.totalStockQty.toLocaleString()}
+                </p>
               </div>
               <Truck className="h-12 w-12 text-green-500" />
             </div>
@@ -268,8 +269,12 @@ const AdminPartsListing: React.FC = () => {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Stock Value</p>
-                <p className="text-3xl font-bold text-gray-900">${stats.totalStockValue.toLocaleString()}</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Total Stock Value
+                </p>
+                <p className="text-3xl font-bold text-gray-900">
+                  ${stats.totalStockValue.toLocaleString()}
+                </p>
               </div>
               <DollarSign className="h-12 w-12 text-yellow-500" />
             </div>
@@ -283,8 +288,12 @@ const AdminPartsListing: React.FC = () => {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Low Stock Items</p>
-                <p className="text-3xl font-bold text-red-600">{stats.lowStockCount}</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Low Stock Items
+                </p>
+                <p className="text-3xl font-bold text-red-600">
+                  {stats.lowStockCount}
+                </p>
               </div>
               <AlertTriangle className="h-12 w-12 text-red-500" />
             </div>
@@ -341,10 +350,16 @@ const AdminPartsListing: React.FC = () => {
               >
                 <Filter className="h-4 w-4" />
                 <span>Filters</span>
-                {showFilters ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                {showFilters ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
               </motion.button>
 
-              {(selectedFilters.category || selectedFilters.brand || selectedFilters.isActive !== undefined) && (
+              {(selectedFilters.category ||
+                selectedFilters.brand ||
+                selectedFilters.isActive !== undefined) && (
                 <button
                   onClick={clearAllFilters}
                   className="text-blue-600 hover:text-blue-700 font-medium text-sm"
@@ -366,10 +381,14 @@ const AdminPartsListing: React.FC = () => {
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Category
+                    </label>
                     <select
                       value={selectedFilters.category}
-                      onChange={(e) => handleFilterChange("category", e.target.value)}
+                      onChange={(e) =>
+                        handleFilterChange("category", e.target.value)
+                      }
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
                     >
                       <option value="">All Categories</option>
@@ -382,10 +401,14 @@ const AdminPartsListing: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Brand</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Brand
+                    </label>
                     <select
                       value={selectedFilters.brand}
-                      onChange={(e) => handleFilterChange("brand", e.target.value)}
+                      onChange={(e) =>
+                        handleFilterChange("brand", e.target.value)
+                      }
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
                     >
                       <option value="">All Brands</option>
@@ -398,10 +421,23 @@ const AdminPartsListing: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Status
+                    </label>
                     <select
-                      value={selectedFilters.isActive === undefined ? "" : selectedFilters.isActive.toString()}
-                      onChange={(e) => handleFilterChange("isActive", e.target.value === "" ? undefined : e.target.value === "true")}
+                      value={
+                        selectedFilters.isActive === undefined
+                          ? ""
+                          : selectedFilters.isActive.toString()
+                      }
+                      onChange={(e) =>
+                        handleFilterChange(
+                          "isActive",
+                          e.target.value === ""
+                            ? undefined
+                            : e.target.value === "true"
+                        )
+                      }
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
                     >
                       <option value="">All Status</option>
@@ -411,7 +447,9 @@ const AdminPartsListing: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Items per page</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Items per page
+                    </label>
                     <select
                       value={itemsPerPage}
                       onChange={(e) => {
@@ -439,7 +477,8 @@ const AdminPartsListing: React.FC = () => {
             <div className="bg-blue-50 border-b border-blue-200 px-6 py-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-blue-700">
-                  {selectedParts.length} part{selectedParts.length !== 1 ? 's' : ''} selected
+                  {selectedParts.length} part
+                  {selectedParts.length !== 1 ? "s" : ""} selected
                 </span>
                 <div className="flex items-center space-x-2">
                   <button className="text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-md transition-colors">
@@ -460,7 +499,10 @@ const AdminPartsListing: React.FC = () => {
                   <th className="px-6 py-3 text-left">
                     <input
                       type="checkbox"
-                      checked={selectedParts.length === transformedParts.length && transformedParts.length > 0}
+                      checked={
+                        selectedParts.length === transformedParts.length &&
+                        transformedParts.length > 0
+                      }
                       onChange={toggleSelectAll}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
@@ -471,9 +513,12 @@ const AdminPartsListing: React.FC = () => {
                   >
                     <div className="flex items-center space-x-1">
                       <span>Part Number</span>
-                      {sortBy === "partNumber" && (
-                        sortOrder === "asc" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                      )}
+                      {sortBy === "partNumber" &&
+                        (sortOrder === "asc" ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        ))}
                     </div>
                   </th>
                   <th
@@ -482,9 +527,12 @@ const AdminPartsListing: React.FC = () => {
                   >
                     <div className="flex items-center space-x-1">
                       <span>Name</span>
-                      {sortBy === "name" && (
-                        sortOrder === "asc" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                      )}
+                      {sortBy === "name" &&
+                        (sortOrder === "asc" ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        ))}
                     </div>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -499,9 +547,12 @@ const AdminPartsListing: React.FC = () => {
                   >
                     <div className="flex items-center space-x-1">
                       <span>Price</span>
-                      {sortBy === "price" && (
-                        sortOrder === "asc" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                      )}
+                      {sortBy === "price" &&
+                        (sortOrder === "asc" ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        ))}
                     </div>
                   </th>
                   <th
@@ -510,9 +561,12 @@ const AdminPartsListing: React.FC = () => {
                   >
                     <div className="flex items-center space-x-1">
                       <span>Stock</span>
-                      {sortBy === "stockQty" && (
-                        sortOrder === "asc" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                      )}
+                      {sortBy === "stockQty" &&
+                        (sortOrder === "asc" ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        ))}
                     </div>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -552,12 +606,12 @@ const AdminPartsListing: React.FC = () => {
                   ))
                 ) : transformedParts.length > 0 ? (
                   transformedParts.map((part) => {
-                    const availability = getAvailabilityStatus(part);
                     return (
                       <motion.tr
                         key={part.id}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
+                        onClick={() => handlePartDetails(part.id)}
                         className="hover:bg-gray-50 transition-colors"
                       >
                         <td className="px-6 py-4">
@@ -569,21 +623,31 @@ const AdminPartsListing: React.FC = () => {
                           />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-gray-900">{part.partNumber}</span>
+                          <span className="text-sm font-medium text-gray-900">
+                            {part.partNumber}
+                          </span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="max-w-xs">
-                            <div className="text-sm font-medium text-gray-900 truncate">{part.name}</div>
+                            <div className="text-sm font-medium text-gray-900 truncate">
+                              {part.name}
+                            </div>
                             {part.description && (
-                              <div className="text-sm text-gray-500 truncate">{part.description}</div>
+                              <div className="text-sm text-gray-500 truncate">
+                                {part.description}
+                              </div>
                             )}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">{part.category}</span>
+                          <span className="text-sm text-gray-900">
+                            {part.category}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">{part.brand || "—"}</span>
+                          <span className="text-sm text-gray-900">
+                            {part.brand || "—"}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm font-medium text-gray-900">
@@ -591,9 +655,13 @@ const AdminPartsListing: React.FC = () => {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`text-sm font-medium ${
-                            (part.stockQty || 0) <= (part.minimumStock || 10) ? "text-red-600" : "text-gray-900"
-                          }`}>
+                          <span
+                            className={`text-sm font-medium ${
+                              (part.stockQty || 0) <= (part.minimumStock || 10)
+                                ? "text-red-600"
+                                : "text-gray-900"
+                            }`}
+                          >
                             {part.stockQty || 0}
                           </span>
                         </td>
@@ -617,8 +685,12 @@ const AdminPartsListing: React.FC = () => {
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center">
                       <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-500 text-lg mb-2">No parts found</p>
-                      <p className="text-gray-400">Try adjusting your search criteria or filters</p>
+                      <p className="text-gray-500 text-lg mb-2">
+                        No parts found
+                      </p>
+                      <p className="text-gray-400">
+                        Try adjusting your search criteria or filters
+                      </p>
                     </td>
                   </tr>
                 )}
@@ -688,7 +760,9 @@ const AdminPartsListing: React.FC = () => {
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  onClick={() =>
+                    setCurrentPage(Math.min(totalPages, currentPage + 1))
+                  }
                   disabled={currentPage === totalPages}
                   className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
                 >

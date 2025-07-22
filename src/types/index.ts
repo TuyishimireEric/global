@@ -28,15 +28,24 @@ export interface Part {
 export interface PartItem {
   id: string;
   partId: string;
-  barcode?: string;
+  barCode?: string;
   location: string;
-  status: 'available' | 'reserved' | 'sold' | 'damaged' | 'maintenance';
-  condition: 'new' | 'used' | 'refurbished' | 'damaged';
+  status: "available" | "reserved" | "sold" | "damaged" | "maintenance";
+  condition: "new" | "used" | "refurbished" | "damaged";
   serialNumber?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
+  shelveLocation?: string;
+  supplierId?: string;
+  purchasePrice: number;
+  purchaseDate?: string;
+  expiryDate?: string;
+  warrantyPeriod?: number;
+  quotationId?: string;
   assignedTo?: string; // Order ID if reserved/sold
+  addedOn?: string;
+  addedBy?: string;
 }
 
 export interface Order {
@@ -45,7 +54,7 @@ export interface Order {
   customerId: string;
   items: number;
   total: number;
-  status: 'pending' | 'processing' | 'shipped' | 'completed' | 'cancelled';
+  status: "pending" | "processing" | "shipped" | "completed" | "cancelled";
   date: string;
   orderItems?: OrderItem[];
   shippingAddress?: Address;
@@ -141,6 +150,36 @@ export interface LocationI {
 
 export interface BarcodeData {
   code: string;
-  type: 'CODE128' | 'CODE39' | 'EAN13' | 'QR';
+  type: "CODE128" | "CODE39" | "EAN13" | "QR";
   generatedAt: string;
 }
+
+export type CompanyI = {
+  id: string;
+  name: string;
+  type: string;
+  logo: string | null;
+  email: string | null;
+  phoneNumber: string | null;
+  faxNumber: string | null;
+  website: string | null;
+  tin: string | null;
+  registrationNumber: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string | null;
+  bankName: string | null;
+  accountNumber: string | null;
+  routingNumber: string | null;
+  swiftCode: string | null;
+  creditLimit: string | null;
+  paymentTerms: string | null;
+  taxRate: string | null;
+  isActive: boolean;
+  notes: string | null;
+  createdAt: string; // ISO date string
+  updatedAt: string; // ISO date string
+};

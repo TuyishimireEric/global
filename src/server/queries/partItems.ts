@@ -24,10 +24,7 @@ export const partItemSchema = z.object({
   location: z.string().max(100).optional(),
   shelveLocation: z.string().max(100).optional(),
   supplierId: z.string().uuid().optional(),
-  purchasePrice: z
-    .string()
-    .regex(/^\d+(\.\d{1,2})?$/)
-    .optional(),
+  purchasePrice: z.string().optional(),
   purchaseDate: z.string().datetime().optional(),
   expiryDate: z.string().datetime().optional(),
   warrantyPeriod: z.number().int().min(0).optional(),
@@ -35,7 +32,6 @@ export const partItemSchema = z.object({
   status: z.enum(statusValues).default("available"),
   quotationId: z.string().uuid().optional(),
   notes: z.string().optional(),
-  addedBy: z.string().uuid(),
 });
 
 export const updatePartItemSchema = partItemSchema.partial().extend({
@@ -63,7 +59,10 @@ export interface GetPartItemsOptions {
 }
 
 // Create a new part item
-export async function createPartItem(data: z.infer<typeof partItemSchema>) {
+export async function createPartItem(
+  data: z.infer<typeof partItemSchema>,
+  userId: string
+) {
   const validatedData = partItemSchema.parse(data);
 
   const insertData: NewPartItem = {
@@ -76,6 +75,7 @@ export async function createPartItem(data: z.infer<typeof partItemSchema>) {
       : undefined,
     status: validatedData.status,
     condition: validatedData.condition,
+    addedBy: userId,
   };
 
   const [newPartItem] = await db
@@ -88,7 +88,8 @@ export async function createPartItem(data: z.infer<typeof partItemSchema>) {
 
 // Bulk insert part items
 export async function bulkInsertPartItems(
-  items: z.infer<typeof bulkInsertSchema>
+  items: z.infer<typeof bulkInsertSchema>,
+  userId: string
 ) {
   const validatedItems = bulkInsertSchema.parse(items);
 
@@ -98,6 +99,7 @@ export async function bulkInsertPartItems(
     expiryDate: item.expiryDate ? new Date(item.expiryDate) : undefined,
     status: item.status,
     condition: item.condition,
+    addedBy: userId
   }));
 
   const newPartItems = await db
