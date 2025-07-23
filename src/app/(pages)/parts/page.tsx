@@ -85,7 +85,7 @@ const PartsListing: React.FC = () => {
 
   // Fetch parts using React Query
   const {
-    parts: backendParts,
+    parts: parts,
     totalCount,
     totalPages,
     isLoading,
@@ -104,7 +104,7 @@ const PartsListing: React.FC = () => {
 
   // Apply frontend-only filters and sorting
   const filteredParts = useMemo(() => {
-    let filtered = [...backendParts];
+    let filtered = [...parts];
 
     // Apply frontend-only filters that backend doesn't handle
     if (selectedFilters.manufacturer.length > 1) {
@@ -174,7 +174,7 @@ const PartsListing: React.FC = () => {
     }
 
     return filtered;
-  }, [backendParts, selectedFilters, sortBy]);
+  }, [parts, selectedFilters, sortBy]);
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections((prev) => ({
@@ -272,23 +272,23 @@ const PartsListing: React.FC = () => {
       {
         value: "in-stock",
         label: "In Stock",
-        count: backendParts.filter((p) => p.availability === "in-stock").length,
+        count: parts.filter((p) => p.availability === "in-stock").length,
       },
       {
         value: "low-stock",
         label: "Low Stock",
-        count: backendParts.filter((p) => p.availability === "low-stock")
+        count: parts.filter((p) => p.availability === "low-stock")
           .length,
       },
       {
         value: "on-order",
         label: "On Order",
-        count: backendParts.filter((p) => p.availability === "on-order").length,
+        count: parts.filter((p) => p.availability === "on-order").length,
       },
       {
         value: "out-stock",
         label: "Out of Stock",
-        count: backendParts.filter((p) => p.availability === "out-stock")
+        count: parts.filter((p) => p.availability === "out-stock")
           .length,
       },
     ];
@@ -341,7 +341,7 @@ const PartsListing: React.FC = () => {
             <div className="text-xs text-gray-500">Loading categories...</div>
           ) : (
             categories.map((category) => {
-              const count = backendParts.filter(
+              const count = parts.filter(
                 (p) => p.category === category
               ).length;
               return (
@@ -375,7 +375,7 @@ const PartsListing: React.FC = () => {
             </div>
           ) : (
             brands.map((brand) => {
-              const count = backendParts.filter(
+              const count = parts.filter(
                 (p) => p.manufacturer === brand
               ).length;
               return (

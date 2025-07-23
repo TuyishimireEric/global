@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   Search,
   Plus,
@@ -29,9 +30,50 @@ import {
   MapPin,
   Percent,
   DollarSign,
+  Loader2,
+  AlertCircle,
+  LogIn,
+  UserCheck,
+  Crown,
+  Receipt,
 } from "lucide-react";
+import useClientParts from "@/hooks/parts/useParts";
+import { TransformedPart } from "@/types/parts";
+import Link from "next/link";
+import { useClientSession } from "@/hooks/user/useClientSession";
 
-// Types
+// Types matching your backend schema
+interface QuotationItem {
+  partId: string;
+  quantity: number;
+  unitPrice: number;
+  discount: number;
+  totalPrice: number;
+  notes?: string;
+}
+
+interface CreateQuotationData {
+  quotation: {
+    quotationNumber?: string;
+    companyId?: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    customerAddress?: string;
+    subtotal: number;
+    taxAmount: number;
+    discountAmount: number;
+    shippingAmount: number;
+    totalAmount: number;
+    validUntil?: string;
+    paymentTerms?: string;
+    notes?: string;
+    internalNotes?: string;
+    status?: "draft" | "pending" | "confirmed";
+  };
+  items: QuotationItem[];
+}
+
 interface QuoteItem {
   id: string;
   partId: string;
@@ -42,26 +84,9 @@ interface QuoteItem {
   listPrice?: number;
   quantity: number;
   availability: string;
-  image: string;
+  images: string;
   category: string;
-  weight: string;
-  leadTime: string;
-}
-
-interface Part {
-  id: string;
-  name: string;
-  sku: string;
-  manufacturer: string;
-  price: number;
-  listPrice?: number;
-  availability: string;
-  image: string;
-  category: string;
-  weight: string;
-  leadTime: string;
-  rating?: number;
-  reviews?: number;
+  discount: number;
 }
 
 interface CustomerInfo {
@@ -75,117 +100,111 @@ interface CustomerInfo {
   zipCode: string;
 }
 
-// Sample data
-const sampleQuoteItems: QuoteItem[] = [
-  {
-    id: "1",
-    partId: "1",
-    name: "Hydraulic Pump Assembly",
-    sku: "CAT-320-HP-001",
-    manufacturer: "Caterpillar",
-    price: 2450.0,
-    listPrice: 2800.0,
-    quantity: 2,
-    availability: "in-stock",
-    image: "/api/placeholder/300/225",
-    category: "Hydraulic System",
-    weight: "45.2 kg",
-    leadTime: "1-2 days",
-  },
-  {
-    id: "2",
-    partId: "2",
-    name: "Engine Air Filter",
-    sku: "CAT-320-AF-002",
-    manufacturer: "Caterpillar",
-    price: 89.99,
-    listPrice: 120.0,
-    quantity: 4,
-    availability: "in-stock",
-    image: "/api/placeholder/300/225",
-    category: "Engine Components",
-    weight: "2.1 kg",
-    leadTime: "Same day",
-  },
-  {
-    id: "3",
-    partId: "4",
-    name: "Hydraulic Cylinder Seal Kit",
-    sku: "CAT-320-SK-004",
-    manufacturer: "Reman Factory",
-    price: 245.0,
-    listPrice: 289.0,
-    quantity: 1,
-    availability: "in-stock",
-    image: "/api/placeholder/300/225",
-    category: "Hydraulic System",
-    weight: "1.8 kg",
-    leadTime: "1-2 days",
-  },
-];
+interface Client {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  company?: string;
+  address?: string;
+}
 
-const availableParts: Part[] = [
-  {
-    id: "5",
-    name: "Engine Oil Filter",
-    sku: "CAT-320-OF-005",
-    manufacturer: "Caterpillar",
-    price: 34.99,
-    availability: "in-stock",
-    image: "/api/placeholder/300/225",
-    category: "Engine Components",
-    weight: "1.2 kg",
-    leadTime: "Same day",
-    rating: 4.9,
-    reviews: 234,
-  },
-  {
-    id: "6",
-    name: "Track Chain Assembly",
-    sku: "CAT-320-TC-003",
-    manufacturer: "Aftermarket Pro",
-    price: 1850.0,
-    availability: "low-stock",
-    image: "/api/placeholder/300/225",
-    category: "Undercarriage",
-    weight: "85.5 kg",
-    leadTime: "3-5 days",
-    rating: 4.4,
-    reviews: 23,
-  },
-  {
-    id: "7",
-    name: "Boom Cylinder",
-    sku: "CAT-320-BC-006",
-    manufacturer: "Caterpillar",
-    price: 3250.0,
-    availability: "on-order",
-    image: "/api/placeholder/300/225",
-    category: "Hydraulic System",
-    weight: "125.0 kg",
-    leadTime: "7-10 days",
-    rating: 4.5,
-    reviews: 67,
-  },
-  {
-    id: "8",
-    name: "Hydraulic Hose Assembly",
-    sku: "CAT-320-HA-005",
-    manufacturer: "Caterpillar",
-    price: 156.5,
-    availability: "in-stock",
-    image: "/api/placeholder/300/225",
-    category: "Hydraulic System",
-    weight: "3.2 kg",
-    leadTime: "1-2 days",
-    rating: 4.6,
-    reviews: 45,
-  },
-];
+interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  role: "seller" | "customer" | "admin";
+  company?: string;
+}
+
+// API functions
+const getUserProfile = async (): Promise<UserProfile | null> => {
+  try {
+    const response = await fetch("/api/auth/profile");
+    if (!response.ok) return null;
+    return response.json();
+  } catch {
+    return null;
+  }
+};
+
+const getClients = async (): Promise<Client[]> => {
+  const response = await fetch("/api/clients");
+  if (!response.ok) throw new Error("Failed to fetch clients");
+  return response.json();
+};
+
+const createQuotation = async (data: CreateQuotationData) => {
+  const response = await fetch("/api/quotations", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Failed to create quotation");
+  }
+
+  return response.json();
+};
+
+const saveQuotationDraft = async (data: CreateQuotationData) => {
+  const response = await fetch("/api/quotations", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ...data,
+      quotation: {
+        ...data.quotation,
+        status: "draft",
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Failed to save draft");
+  }
+
+  return response.json();
+};
+
+const confirmQuotation = async (quotationId: string) => {
+  const response = await fetch(`/api/quotations/${quotationId}/confirm`, {
+    method: "PATCH",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Failed to confirm quotation");
+  }
+
+  return response.json();
+};
+
+const convertToInvoice = async (quotationId: string) => {
+  const response = await fetch(
+    `/api/quotations/${quotationId}/convert-to-invoice`,
+    {
+      method: "POST",
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Failed to convert to invoice");
+  }
+
+  return response.json();
+};
 
 const QuotationPage: React.FC = () => {
-  const [quoteItems, setQuoteItems] = useState<QuoteItem[]>(sampleQuoteItems);
-  const [searchResults, setSearchResults] = useState<Part[]>([]);
+  const [quoteItems, setQuoteItems] = useState<QuoteItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [editingItem, setEditingItem] = useState<string | null>(null);
@@ -200,58 +219,141 @@ const QuotationPage: React.FC = () => {
     state: "",
     zipCode: "",
   });
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [showCustomerForm, setShowCustomerForm] = useState(false);
-  const [quoteStatus, setQuoteStatus] = useState<
-    "draft" | "sent" | "confirmed"
-  >("draft");
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [notes, setNotes] = useState("");
+  const [paymentTerms, setPaymentTerms] = useState("Net 30");
+  const [validUntilDays, setValidUntilDays] = useState(30);
+  const [shippingAmount, setShippingAmount] = useState(0);
+  const [quotationId, setQuotationId] = useState<string | null>(null);
 
-  // Search functionality
-  useEffect(() => {
-    if (searchQuery.trim()) {
-      const filtered = availableParts.filter(
-        (part) =>
-          part.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          part.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          part.category.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setSearchResults(filtered);
-    } else {
-      setSearchResults([]);
-    }
-  }, [searchQuery]);
+  const { userRole } = useClientSession()
+
+  // Backend query parameters
+  const backendParams = useMemo(
+    () => ({
+      page: 1,
+      limit: 20,
+      searchText: searchQuery || undefined,
+      isActive: true,
+    }),
+    [searchQuery]
+  );
+
+  const { parts, totalCount, isLoading, refetch } =
+    useClientParts(backendParams);
+
+  // Clients query (only for sellers)
+  const { data: clients = [], isLoading: isLoadingClients } = useQuery({
+    queryKey: ["clients"],
+    queryFn: getClients,
+    enabled: userRole === "Seller",
+    retry: false,
+  });
+
+  const queryClient = useQueryClient();
+
+  // Mutations
+  const createQuotationMutation = useMutation({
+    mutationFn: createQuotation,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["quotations"] });
+      setQuotationId(data.id);
+      console.log("Quotation created successfully:", data);
+    },
+    onError: (error: Error) => {
+      console.error("Error creating quotation:", error);
+    },
+  });
+
+  const saveDraftMutation = useMutation({
+    mutationFn: saveQuotationDraft,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["quotations"] });
+      setQuotationId(data.id);
+      console.log("Draft saved successfully:", data);
+    },
+    onError: (error: Error) => {
+      console.error("Error saving draft:", error);
+    },
+  });
+
+  const confirmQuotationMutation = useMutation({
+    mutationFn: confirmQuotation,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["quotations"] });
+      console.log("Quotation confirmed successfully:", data);
+    },
+    onError: (error: Error) => {
+      console.error("Error confirming quotation:", error);
+    },
+  });
+
+  const convertToInvoiceMutation = useMutation({
+    mutationFn: convertToInvoice,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["quotations", "invoices"] });
+      console.log("Converted to invoice successfully:", data);
+    },
+    onError: (error: Error) => {
+      console.error("Error converting to invoice:", error);
+    },
+  });
 
   // Calculations
   const subtotal = quoteItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
+    (sum, item) => sum + item.price * item.quantity * (1 - item.discount / 100),
     0
   );
-  const discount = subtotal * (discountPercent / 100);
-  const tax = (subtotal - discount) * 0.085; // 8.5% tax
-  const total = subtotal - discount + tax;
+  const discountAmount = subtotal * (discountPercent / 100);
+  const taxAmount = (subtotal - discountAmount + shippingAmount) * 0.085; // 8.5% tax
+  const totalAmount = subtotal - discountAmount + taxAmount + shippingAmount;
   const totalSavings = quoteItems.reduce((sum, item) => {
-    const savings = item.listPrice
-      ? (item.listPrice - item.price) * item.quantity
-      : 0;
-    return sum + savings;
+    const unitSavings = item.listPrice ? item.listPrice - item.price : 0;
+    const discountSavings = item.price * (item.discount / 100);
+    return sum + (unitSavings + discountSavings) * item.quantity;
   }, 0);
 
+  // Helper functions
   const updateQuantity = (id: string, quantity: number) => {
     if (quantity <= 0) {
       removeItem(id);
     } else {
       setQuoteItems((prev) =>
-        prev.map((item) => (item.id === id ? { ...item, quantity } : item))
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                quantity,
+                totalPrice: item.price * quantity * (1 - item.discount / 100),
+              }
+            : item
+        )
       );
     }
+  };
+
+  const updateItemDiscount = (id: string, discount: number) => {
+    setQuoteItems((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              discount,
+              totalPrice: item.price * item.quantity * (1 - discount / 100),
+            }
+          : item
+      )
+    );
   };
 
   const removeItem = (id: string) => {
     setQuoteItems((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const addToQuote = (part: Part, quantity: number = 1) => {
+  const addToQuote = (part: TransformedPart, quantity: number = 1) => {
     const existingItem = quoteItems.find((item) => item.partId === part.id);
 
     if (existingItem) {
@@ -263,14 +365,12 @@ const QuotationPage: React.FC = () => {
         name: part.name,
         sku: part.sku,
         manufacturer: part.manufacturer,
-        price: part.price,
-        listPrice: part.listPrice,
+        price: Number(part.price),
         quantity,
         availability: part.availability,
-        image: part.image,
+        images: part.images[0],
         category: part.category,
-        weight: part.weight,
-        leadTime: part.leadTime,
+        discount: 0,
       };
       setQuoteItems((prev) => [...prev, newItem]);
     }
@@ -278,21 +378,102 @@ const QuotationPage: React.FC = () => {
     setSearchQuery("");
   };
 
-  const startEditing = (id: string, currentQuantity: number) => {
-    setEditingItem(id);
-    setEditQuantity(currentQuantity);
+  const prepareQuotationData = (
+    status: "draft" | "pending" | "confirmed" = "draft"
+  ): CreateQuotationData => {
+    const validUntil = new Date();
+    validUntil.setDate(validUntil.getDate() + validUntilDays);
+
+    // Use selected client info for sellers, or customer form info for others
+    const customerData =
+      userRole === "Seller" && selectedClient
+        ? {
+            customerName: selectedClient.name,
+            customerEmail: selectedClient.email,
+            customerPhone: selectedClient.phone,
+            customerAddress: selectedClient.address,
+            companyId: selectedClient.id,
+          }
+        : {
+            customerName: customerInfo.name || undefined,
+            customerEmail: customerInfo.email || undefined,
+            customerPhone: customerInfo.phone || undefined,
+            customerAddress:
+              `${customerInfo.address}, ${customerInfo.city}, ${customerInfo.state} ${customerInfo.zipCode}`.trim() ||
+              undefined,
+          };
+
+    return {
+      quotation: {
+        ...customerData,
+        subtotal,
+        taxAmount,
+        discountAmount,
+        shippingAmount,
+        totalAmount,
+        validUntil: validUntil.toISOString(),
+        paymentTerms,
+        notes: notes || undefined,
+        status,
+      },
+      items: quoteItems.map((item) => ({
+        partId: item.partId,
+        quantity: item.quantity,
+        unitPrice: item.price,
+        discount: item.discount,
+        totalPrice: item.price * item.quantity * (1 - item.discount / 100),
+        notes: undefined,
+      })),
+    };
   };
 
-  const saveEdit = () => {
-    if (editingItem) {
-      updateQuantity(editingItem, editQuantity);
+  const handleSaveDraft = () => {
+    if (!userRole) {
+      setShowLoginPrompt(true);
+      return;
     }
-    setEditingItem(null);
+
+    const data = prepareQuotationData("draft");
+    saveDraftMutation.mutate(data);
   };
 
-  const cancelEdit = () => {
-    setEditingItem(null);
-    setEditQuantity(1);
+  const handleSendQuote = () => {
+    if (!userRole) {
+      setShowLoginPrompt(true);
+      return;
+    }
+
+    // Check if we have customer information
+    const hasCustomerInfo =
+      userRole === "Seller"
+        ? selectedClient
+        : customerInfo.email && customerInfo.name;
+
+    if (!hasCustomerInfo) {
+      if (userRole === "Seller") {
+        // Show client selection for sellers
+        return;
+      } else {
+        setShowCustomerForm(true);
+        return;
+      }
+    }
+
+    const status = userRole === "Seller" ? "confirmed" : "pending";
+    const data = prepareQuotationData(status);
+    createQuotationMutation.mutate(data);
+  };
+
+  const handleConfirmQuotation = () => {
+    if (quotationId) {
+      confirmQuotationMutation.mutate(quotationId);
+    }
+  };
+
+  const handleConvertToInvoice = () => {
+    if (quotationId) {
+      convertToInvoiceMutation.mutate(quotationId);
+    }
   };
 
   const AvailabilityBadge = ({ availability }: { availability: string }) => {
@@ -332,7 +513,9 @@ const QuotationPage: React.FC = () => {
   };
 
   const QuoteItemCard = ({ item }: { item: QuoteItem }) => {
-    const itemTotal = item.price * item.quantity;
+    const itemSubtotal = item.price * item.quantity;
+    const itemDiscount = itemSubtotal * (item.discount / 100);
+    const itemTotal = itemSubtotal - itemDiscount;
     const itemSavings = item.listPrice
       ? (item.listPrice - item.price) * item.quantity
       : 0;
@@ -349,7 +532,7 @@ const QuotationPage: React.FC = () => {
           {/* Product Image */}
           <div className="w-full lg:w-32 h-32 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
             <img
-              src={item.image}
+              src={item.images}
               alt={item.name}
               className="w-full h-full object-cover"
             />
@@ -378,14 +561,7 @@ const QuotationPage: React.FC = () => {
                     <span className="text-gray-500">Category:</span>
                     <p className="font-medium">{item.category}</p>
                   </div>
-                  <div>
-                    <span className="text-gray-500">Weight:</span>
-                    <p className="font-medium">{item.weight}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Lead Time:</span>
-                    <p className="font-medium">{item.leadTime}</p>
-                  </div>
+
                   <div>
                     <span className="text-gray-500">Unit Price:</span>
                     <div className="flex items-center space-x-2">
@@ -400,6 +576,36 @@ const QuotationPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Item Discount - Only for sellers */}
+                {userRole === "Seller" && (
+                  <div className="mt-3 flex items-center space-x-3">
+                    <label className="text-sm text-gray-600">
+                      Item Discount:
+                    </label>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="50"
+                        value={item.discount}
+                        onChange={(e) =>
+                          updateItemDiscount(
+                            item.id,
+                            parseFloat(e.target.value) || 0
+                          )
+                        }
+                        className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm"
+                      />
+                      <Percent className="h-4 w-4 text-gray-400" />
+                      {item.discount > 0 && (
+                        <span className="text-sm text-green-600 font-medium">
+                          (-${itemDiscount.toFixed(2)})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Actions */}
@@ -418,13 +624,16 @@ const QuotationPage: React.FC = () => {
                         className="w-16 px-2 py-1 border border-gray-300 rounded text-center font-mono"
                       />
                       <button
-                        onClick={saveEdit}
+                        onClick={() => {
+                          updateQuantity(item.id, editQuantity);
+                          setEditingItem(null);
+                        }}
                         className="p-1 text-green-600 hover:bg-green-100 rounded"
                       >
                         <Check className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={cancelEdit}
+                        onClick={() => setEditingItem(null)}
                         className="p-1 text-red-600 hover:bg-red-100 rounded"
                       >
                         <X className="h-4 w-4" />
@@ -441,7 +650,10 @@ const QuotationPage: React.FC = () => {
                         <Minus className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => startEditing(item.id, item.quantity)}
+                        onClick={() => {
+                          setEditingItem(item.id);
+                          setEditQuantity(item.quantity);
+                        }}
                         className="px-4 py-2 font-mono font-bold text-lg bg-yellow-100 hover:bg-yellow-200 rounded-lg transition-colors"
                       >
                         {item.quantity}
@@ -463,9 +675,9 @@ const QuotationPage: React.FC = () => {
                   <div className="text-lg font-bold text-gray-900 mb-1">
                     ${itemTotal.toFixed(2)}
                   </div>
-                  {itemSavings > 0 && (
+                  {(itemSavings > 0 || item.discount > 0) && (
                     <div className="text-sm text-green-600 font-medium mb-2">
-                      Save ${itemSavings.toFixed(2)}
+                      Save ${(itemSavings + itemDiscount).toFixed(2)}
                     </div>
                   )}
                   <button
@@ -483,70 +695,70 @@ const QuotationPage: React.FC = () => {
     );
   };
 
-  const SearchResultCard = ({ part }: { part: Part }) => {
-    const isInQuote = quoteItems.some((item) => item.partId === part.id);
+  const ClientSelector = () => {
+    if (userRole !== "Seller") return null;
 
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white border border-gray-200 rounded-xl p-4 hover:border-yellow-400 hover:shadow-md transition-all duration-300"
-      >
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-            <img
-              src={part.image}
-              alt={part.name}
-              className="w-full h-full object-cover"
-            />
+      <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+          <UserCheck className="h-5 w-5 mr-2 text-yellow-600" />
+          Select Client
+        </h3>
+
+        {isLoadingClients ? (
+          <div className="flex items-center space-x-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Loading clients...</span>
           </div>
+        ) : (
+          <div className="space-y-2">
+            <select
+              value={selectedClient?.id || ""}
+              onChange={(e) => {
+                const client = clients.find((c) => c.id === e.target.value);
+                setSelectedClient(client || null);
+              }}
+              className="w-full border border-gray-300 rounded-lg p-3 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-200 focus:outline-none"
+            >
+              <option value="">Select a client...</option>
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.name} - {client.email}{" "}
+                  {client.company && `(${client.company})`}
+                </option>
+              ))}
+            </select>
 
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-mono text-yellow-600 text-xs font-bold bg-yellow-100 px-2 py-1 rounded">
-                {part.sku}
-              </span>
-              <AvailabilityBadge availability={part.availability} />
-            </div>
-            <h4 className="font-bold text-gray-900 text-sm mb-1 truncate">
-              {part.name}
-            </h4>
-            <p className="text-xs text-gray-600 mb-2">{part.manufacturer}</p>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <span className="font-bold text-yellow-600">
-                  ${part.price.toFixed(2)}
-                </span>
-                {part.listPrice && (
-                  <span className="text-xs text-gray-500 line-through">
-                    ${part.listPrice.toFixed(2)}
-                  </span>
-                )}
-              </div>
-
-              {part.rating && (
-                <div className="flex items-center space-x-1">
-                  <Star className="h-3 w-3 text-yellow-500 fill-current" />
-                  <span className="text-xs text-gray-600">{part.rating}</span>
+            {selectedClient && (
+              <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                <div className="text-sm text-gray-600">
+                  <p>
+                    <strong>Name:</strong> {selectedClient.name}
+                  </p>
+                  <p>
+                    <strong>Email:</strong> {selectedClient.email}
+                  </p>
+                  {selectedClient.phone && (
+                    <p>
+                      <strong>Phone:</strong> {selectedClient.phone}
+                    </p>
+                  )}
+                  {selectedClient.company && (
+                    <p>
+                      <strong>Company:</strong> {selectedClient.company}
+                    </p>
+                  )}
+                  {selectedClient.address && (
+                    <p>
+                      <strong>Address:</strong> {selectedClient.address}
+                    </p>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
-
-          <button
-            onClick={() => addToQuote(part)}
-            disabled={isInQuote}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-300 ${
-              isInQuote
-                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                : "bg-yellow-500 hover:bg-yellow-600 text-white"
-            }`}
-          >
-            {isInQuote ? "Added" : "Add"}
-          </button>
-        </div>
-      </motion.div>
+        )}
+      </div>
     );
   };
 
@@ -568,29 +780,46 @@ const QuotationPage: React.FC = () => {
                 <h1 className="text-3xl font-black text-white mb-1">
                   <span className="text-black">CAT</span> Parts Quotation
                 </h1>
-                <p className="text-yellow-100">
-                  Quote #QT-{Date.now().toString().slice(-6)} •{" "}
-                  {quoteItems.length} items
-                </p>
+                <div className="flex items-center space-x-4 text-yellow-100">
+                  <span>
+                    Quote #QT-{Date.now().toString().slice(-6)} •{" "}
+                    {quoteItems.length} items
+                  </span>
+                  {userRole && (
+                    <div className="flex items-center space-x-2">
+                      {userRole === "Seller" && (
+                        <Crown className="h-4 w-4" />
+                      )}
+                      <span className="text-sm bg-white/20 px-2 py-1 rounded capitalize">
+                        {userRole}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
             <div className="flex items-center space-x-3">
-              <div
-                className={`px-4 py-2 rounded-lg text-sm font-bold ${
-                  quoteStatus === "draft"
-                    ? "bg-yellow-200 text-yellow-800"
-                    : quoteStatus === "sent"
-                    ? "bg-blue-200 text-blue-800"
-                    : "bg-green-200 text-green-800"
-                }`}
-              >
-                {quoteStatus === "draft"
-                  ? "Draft"
-                  : quoteStatus === "sent"
-                  ? "Sent"
-                  : "Confirmed"}
-              </div>
+              {!userRole && (
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowLoginPrompt(true)}
+                  className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-bold transition-all duration-300 flex items-center space-x-2"
+                >
+                  <LogIn className="h-5 w-5" />
+                  <span>Login</span>
+                </motion.button>
+              )}
+
+              {(createQuotationMutation.status === "success" ||
+                saveDraftMutation.status === "success") && (
+                <div className="px-4 py-2 rounded-lg text-sm font-bold bg-green-200 text-green-800">
+                  {createQuotationMutation.status === "success"
+                    ? "Sent"
+                    : "Saved"}
+                </div>
+              )}
 
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -610,6 +839,9 @@ const QuotationPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Client Selector for Sellers */}
+            <ClientSelector />
+
             {/* Add Parts Search */}
             <AnimatePresence>
               {showSearch && (
@@ -645,22 +877,67 @@ const QuotationPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {searchResults.length > 0 && (
+                  {parts?.length > 0 && (
                     <div className="p-6 max-h-96 overflow-y-auto">
                       <div className="space-y-4">
-                        {searchResults.map((part) => (
-                          <SearchResultCard key={part.id} part={part} />
+                        {parts?.map((part) => (
+                          <div
+                            key={part.id}
+                            className="bg-white border border-gray-200 rounded-xl p-4 hover:border-yellow-400 hover:shadow-md transition-all duration-300"
+                          >
+                            <div className="flex items-center gap-4">
+                              <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                                <img
+                                  src={part.images[0]}
+                                  alt={part.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-mono text-yellow-600 text-xs font-bold bg-yellow-100 px-2 py-1 rounded">
+                                    {part.sku}
+                                  </span>
+                                  <AvailabilityBadge
+                                    availability={part.availability}
+                                  />
+                                </div>
+                                <h4 className="font-bold text-gray-900 text-sm mb-1 truncate">
+                                  {part.name}
+                                </h4>
+                                <p className="text-xs text-gray-600 mb-2">
+                                  {part.manufacturer}
+                                </p>
+
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-bold text-yellow-600">
+                                      ${Number(part.price).toFixed(2)}
+                                    </span>
+                                  </div>
+
+                                  {part.rating && (
+                                    <div className="flex items-center space-x-1">
+                                      <Star className="h-3 w-3 text-yellow-500 fill-current" />
+                                      <span className="text-xs text-gray-600">
+                                        {part.rating}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() => addToQuote(part)}
+                                className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium text-sm transition-all duration-300"
+                              >
+                                Add
+                              </button>
+                            </div>
+                          </div>
                         ))}
                       </div>
-                    </div>
-                  )}
-
-                  {searchQuery && searchResults.length === 0 && (
-                    <div className="p-6 text-center">
-                      <Package className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                      <p className="text-gray-600">
-                        No parts found matching your search.
-                      </p>
                     </div>
                   )}
                 </motion.div>
@@ -701,6 +978,51 @@ const QuotationPage: React.FC = () => {
               )}
             </div>
 
+            {/* Quote Settings */}
+            {quoteItems.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Payment Terms */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4">
+                    Payment Terms
+                  </h3>
+                  <select
+                    value={paymentTerms}
+                    onChange={(e) => setPaymentTerms(e.target.value)}
+                    disabled={userRole !== "Seller"}
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:border-yellow-500 focus:ring-2 focus:ring-yellow-200 focus:outline-none disabled:bg-gray-100"
+                  >
+                    <option value="Net 15">Net 15 Days</option>
+                    <option value="Net 30">Net 30 Days</option>
+                    <option value="Net 60">Net 60 Days</option>
+                    <option value="COD">Cash on Delivery</option>
+                    <option value="Prepaid">Prepaid</option>
+                  </select>
+                </div>
+
+                {/* Quote Validity */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4">
+                    Quote Valid For
+                  </h3>
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="number"
+                      min="1"
+                      max="90"
+                      value={validUntilDays}
+                      onChange={(e) =>
+                        setValidUntilDays(parseInt(e.target.value) || 30)
+                      }
+                      disabled={userRole !== "Seller"}
+                      className="w-20 border border-gray-300 rounded-lg p-3 text-center focus:border-yellow-500 focus:ring-2 focus:ring-yellow-200 focus:outline-none disabled:bg-gray-100"
+                    />
+                    <span className="text-gray-600">days</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Notes Section */}
             {quoteItems.length > 0 && (
               <div className="bg-white border border-gray-200 rounded-xl p-6">
@@ -737,42 +1059,65 @@ const QuotationPage: React.FC = () => {
 
                   {totalSavings > 0 && (
                     <div className="flex justify-between text-green-600">
-                      <span>You Save:</span>
+                      <span>Item Savings:</span>
                       <span className="font-medium">
                         -${totalSavings.toFixed(2)}
                       </span>
                     </div>
                   )}
 
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Discount:</span>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="number"
-                        min="0"
-                        max="50"
-                        value={discountPercent}
-                        onChange={(e) =>
-                          setDiscountPercent(parseFloat(e.target.value) || 0)
-                        }
-                        className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm"
-                      />
-                      <Percent className="h-4 w-4 text-gray-400" />
+                  {/* Quote Discount - Only for sellers */}
+                  {userRole === "Seller" && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Quote Discount:</span>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="50"
+                          value={discountPercent}
+                          onChange={(e) =>
+                            setDiscountPercent(parseFloat(e.target.value) || 0)
+                          }
+                          className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm"
+                        />
+                        <Percent className="h-4 w-4 text-gray-400" />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  {discount > 0 && (
+                  {discountAmount > 0 && (
                     <div className="flex justify-between text-green-600">
                       <span>Discount Amount:</span>
                       <span className="font-medium">
-                        -${discount.toFixed(2)}
+                        -${discountAmount.toFixed(2)}
                       </span>
+                    </div>
+                  )}
+
+                  {/* Shipping - Only for sellers */}
+                  {userRole === "Seller" && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Shipping:</span>
+                      <div className="flex items-center space-x-2">
+                        <DollarSign className="h-4 w-4 text-gray-400" />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={shippingAmount}
+                          onChange={(e) =>
+                            setShippingAmount(parseFloat(e.target.value) || 0)
+                          }
+                          className="w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm"
+                        />
+                      </div>
                     </div>
                   )}
 
                   <div className="flex justify-between">
                     <span className="text-gray-600">Tax (8.5%):</span>
-                    <span className="font-medium">${tax.toFixed(2)}</span>
+                    <span className="font-medium">${taxAmount.toFixed(2)}</span>
                   </div>
 
                   <div className="border-t border-gray-200 pt-4">
@@ -781,23 +1126,51 @@ const QuotationPage: React.FC = () => {
                         Total:
                       </span>
                       <span className="text-2xl font-black text-yellow-600">
-                        ${total.toFixed(2)}
+                        ${totalAmount.toFixed(2)}
                       </span>
                     </div>
                   </div>
                 </div>
 
+                {/* Error Messages */}
+                {(createQuotationMutation.error ||
+                  saveDraftMutation.error ||
+                  confirmQuotationMutation.error ||
+                  convertToInvoiceMutation.error) && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <AlertCircle className="h-4 w-4 text-red-600" />
+                      <span className="text-sm text-red-600">
+                        {createQuotationMutation.error?.message ||
+                          saveDraftMutation.error?.message ||
+                          confirmQuotationMutation.error?.message ||
+                          convertToInvoiceMutation.error?.message}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Action Buttons */}
                 <div className="space-y-3">
+                  {/* Save Draft Button */}
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="w-full bg-white border border-gray-300 hover:border-gray-400 text-gray-700 hover:text-gray-900 py-3 px-4 rounded-lg font-bold transition-all duration-300 flex items-center justify-center space-x-2"
+                    onClick={handleSaveDraft}
+                    disabled={saveDraftMutation.isPending}
+                    className="w-full bg-white border border-gray-300 hover:border-gray-400 text-gray-700 hover:text-gray-900 py-3 px-4 rounded-lg font-bold transition-all duration-300 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Save className="h-5 w-5" />
-                    <span>Save Draft</span>
+                    {saveDraftMutation.isPending ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Save className="h-5 w-5" />
+                    )}
+                    <span>
+                      {saveDraftMutation.isPending ? "Saving..." : "Save Draft"}
+                    </span>
                   </motion.button>
 
+                  {/* Download PDF Button */}
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
@@ -806,13 +1179,62 @@ const QuotationPage: React.FC = () => {
                     <Download className="h-5 w-5" />
                     <span>Download PDF</span>
                   </motion.button>
+
+                  {/* Send Quote Button */}
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleSendQuote}
+                    disabled={
+                      createQuotationMutation.isPending ||
+                      (userRole === "Seller" && !selectedClient)
+                    }
+                    className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-white py-3 px-4 rounded-lg font-bold transition-all duration-300 shadow-md hover:shadow-yellow-500/30 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {createQuotationMutation.isPending ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Send className="h-5 w-5" />
+                    )}
+                    <span>
+                      {createQuotationMutation.isPending
+                        ? "Sending..."
+                        : userRole === "Seller"
+                        ? "Confirm & Send Quote"
+                        : "Send Quote"}
+                    </span>
+                  </motion.button>
+
+                  {/* Convert to Invoice Button - Only for sellers with confirmed quotes */}
+                  {userRole === "Seller" &&
+                    quotationId &&
+                    createQuotationMutation.status === "success" && (
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleConvertToInvoice}
+                        disabled={convertToInvoiceMutation.isPending}
+                        className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white py-3 px-4 rounded-lg font-bold transition-all duration-300 shadow-md hover:shadow-green-500/30 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {convertToInvoiceMutation.isPending ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <Receipt className="h-5 w-5" />
+                        )}
+                        <span>
+                          {convertToInvoiceMutation.isPending
+                            ? "Converting..."
+                            : "Convert to Invoice"}
+                        </span>
+                      </motion.button>
+                    )}
                 </div>
 
                 {/* Quote Info */}
                 <div className="mt-6 pt-6 border-t border-gray-200 space-y-3 text-sm text-gray-600">
                   <div className="flex items-center space-x-2">
                     <Clock className="h-4 w-4" />
-                    <span>Quote valid for 30 days</span>
+                    <span>Quote valid for {validUntilDays} days</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Truck className="h-4 w-4" />
@@ -822,6 +1244,12 @@ const QuotationPage: React.FC = () => {
                     <CheckCircle className="h-4 w-4" />
                     <span>All parts include warranty</span>
                   </div>
+                  {userRole === "Seller" && (
+                    <div className="flex items-center space-x-2">
+                      <Crown className="h-4 w-4" />
+                      <span>Seller privileges enabled</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -883,6 +1311,52 @@ const QuotationPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Login Prompt Modal */}
+      <AnimatePresence>
+        {showLoginPrompt && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => setShowLoginPrompt(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-xl p-8 max-w-md w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center">
+                <LogIn className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">
+                  Login Required
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  You need to be logged in to save quotations and access
+                  advanced features.
+                </p>
+                <div className="space-y-3">
+                  <Link
+                    href={"/login"}
+                    className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-white py-3 px-4 rounded-lg font-bold transition-all duration-300"
+                  >
+                    Login
+                  </Link>
+                  <button
+                    onClick={() => setShowLoginPrompt(false)}
+                    className="w-full text-gray-500 hover:text-gray-700 py-2 text-sm transition-colors"
+                  >
+                    Continue without saving
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Customer Information Modal */}
       <AnimatePresence>
         {showCustomerForm && (
@@ -912,7 +1386,15 @@ const QuotationPage: React.FC = () => {
                 </button>
               </div>
 
-              <form className="space-y-6">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const data = prepareQuotationData("pending");
+                  createQuotationMutation.mutate(data);
+                  setShowCustomerForm(false);
+                }}
+                className="space-y-6"
+              >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1078,28 +1560,43 @@ const QuotationPage: React.FC = () => {
                       </h4>
                       <p className="text-yellow-800 text-sm">
                         This quote will be sent to the provided email address
-                        and will be valid for 30 days. You&apos;ll receive a
-                        confirmation email with quote details and next steps.
+                        and will be valid for {validUntilDays} days. You'll
+                        receive a confirmation email with quote details and next
+                        steps.
                       </p>
                     </div>
                   </div>
                 </div>
+
+                {createQuotationMutation.error && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-center space-x-3">
+                      <AlertCircle className="h-5 w-5 text-red-600" />
+                      <span className="text-red-600 text-sm">
+                        {createQuotationMutation.error.message}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex space-x-4 pt-6">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     type="submit"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setQuoteStatus("sent");
-                      setShowCustomerForm(false);
-                      // Here you would typically send the quote
-                    }}
-                    className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-white py-3 px-6 rounded-lg font-bold transition-all duration-300 shadow-md hover:shadow-yellow-500/30 flex items-center justify-center space-x-2"
+                    disabled={createQuotationMutation.isPending}
+                    className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-white py-3 px-6 rounded-lg font-bold transition-all duration-300 shadow-md hover:shadow-yellow-500/30 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Send className="h-5 w-5" />
-                    <span>Send Quote</span>
+                    {createQuotationMutation.isPending ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Send className="h-5 w-5" />
+                    )}
+                    <span>
+                      {createQuotationMutation.isPending
+                        ? "Sending..."
+                        : "Send Quote"}
+                    </span>
                   </motion.button>
 
                   <motion.button
@@ -1118,9 +1615,9 @@ const QuotationPage: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Success Message */}
+      {/* Success Messages */}
       <AnimatePresence>
-        {quoteStatus === "sent" && (
+        {createQuotationMutation.status === "success" && (
           <motion.div
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1129,13 +1626,71 @@ const QuotationPage: React.FC = () => {
           >
             <CheckCircle className="h-5 w-5" />
             <div>
-              <p className="font-bold">Quote Sent Successfully!</p>
+              <p className="font-bold">
+                {userRole === "Seller"
+                  ? "Quote Confirmed & Sent!"
+                  : "Quote Sent Successfully!"}
+              </p>
               <p className="text-sm opacity-90">
-                Customer will receive an email confirmation
+                {userRole === "Seller"
+                  ? "Quote is now confirmed and ready for invoicing"
+                  : "Customer will receive an email confirmation"}
               </p>
             </div>
             <button
-              onClick={() => setQuoteStatus("draft")}
+              onClick={() => createQuotationMutation.reset()}
+              className="ml-4 hover:bg-green-600 p-1 rounded"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Draft Saved Message */}
+      <AnimatePresence>
+        {saveDraftMutation.status === "success" && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-6 right-6 bg-blue-500 text-white px-6 py-4 rounded-lg shadow-lg z-50 flex items-center space-x-3"
+          >
+            <Save className="h-5 w-5" />
+            <div>
+              <p className="font-bold">Draft Saved!</p>
+              <p className="text-sm opacity-90">
+                You can continue editing later
+              </p>
+            </div>
+            <button
+              onClick={() => saveDraftMutation.reset()}
+              className="ml-4 hover:bg-blue-600 p-1 rounded"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Convert to Invoice Success Message */}
+      <AnimatePresence>
+        {convertToInvoiceMutation.status === "success" && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-6 right-6 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50 flex items-center space-x-3"
+          >
+            <Receipt className="h-5 w-5" />
+            <div>
+              <p className="font-bold">Converted to Invoice!</p>
+              <p className="text-sm opacity-90">
+                Quote has been successfully converted to an invoice
+              </p>
+            </div>
+            <button
+              onClick={() => convertToInvoiceMutation.reset()}
               className="ml-4 hover:bg-green-600 p-1 rounded"
             >
               <X className="h-4 w-4" />
